@@ -66,12 +66,15 @@ show whether the current default branch starts on the judge GPU.
 | 03 · quantization | [FP16/NF4 paired lab](seminars/03-quantization-tradeoffs.ipynb) | [Open](https://colab.research.google.com/github/levshaazz/llm-serving-mastery-submission-example/blob/main/seminars/03-quantization-tradeoffs.ipynb) |
 | 04 · vLLM API | [local server and SDK lab](seminars/04-vllm-openai-serving.ipynb) | [Open](https://colab.research.google.com/github/levshaazz/llm-serving-mastery-submission-example/blob/main/seminars/04-vllm-openai-serving.ipynb) |
 
-Topics 03–04 deliberately use small, bounded smoke experiments. Their notebooks are structurally
-checked in CI but await an instructor GPU rehearsal; they do not contain claimed benchmark results.
+Topics 03–04 deliberately use small, bounded smoke experiments. All Topics 01–04 notebooks have
+passed a sequential offline instructor GPU rehearsal on an RTX 5070 Ti. The notebooks themselves
+contain no prefilled results; the reviewed instructor evidence and limitations are linked from the
+[course provenance page](https://levshaazz.github.io/llm-serving-mastery/en/provenance/).
 Set `LSM_MODEL_CACHE` to persistent storage if the runtime is ephemeral. Topics 02–04 default to
 ignored `.cache/models`; Topic 03 and Topic 04 reuse the same pinned 0.5B snapshot, while Topic 02
-also uses a pinned 1.5B snapshot. Later runs load these locally rather than downloading for every
-fresh server process. Keep caches and local logs
+also uses a pinned 1.5B snapshot. Topic 01 shares the same durable-cache behavior. Matching pinned
+packages are reused without reinstalling on every notebook execution. Later runs load pinned models
+locally rather than downloading for every fresh server process. Keep caches and local logs
 out of Git; inspect evidence before publishing it.
 
 The [course site](https://levshaazz.github.io/llm-serving-mastery/) has the syllabus, deadlines,

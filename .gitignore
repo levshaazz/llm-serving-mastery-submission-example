@@ -5,3 +5,6 @@ __pycache__/
 .env.*
 !.env.example
 runs/
+.cache/
+model-cache/
+evidence/*.local.log

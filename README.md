@@ -63,6 +63,16 @@ show whether the current default branch starts on the judge GPU.
 | 00 · live demonstration | [pipeline vs vLLM](seminars/00-live-demo-pipeline-vs-vllm.ipynb) | [Open](https://colab.research.google.com/github/levshaazz/llm-serving-mastery-submission-example/blob/main/seminars/00-live-demo-pipeline-vs-vllm.ipynb) |
 | 01 · single-request baseline | [serving baseline](seminars/01-serving-system-baseline.ipynb) | [Open](https://colab.research.google.com/github/levshaazz/llm-serving-mastery-submission-example/blob/main/seminars/01-serving-system-baseline.ipynb) |
 | 02 · GPU bottlenecks | [profiler lab](seminars/02-gpu-profiling-and-bottlenecks.ipynb) | [Open](https://colab.research.google.com/github/levshaazz/llm-serving-mastery-submission-example/blob/main/seminars/02-gpu-profiling-and-bottlenecks.ipynb) |
+| 03 · quantization | [FP16/NF4 paired lab](seminars/03-quantization-tradeoffs.ipynb) | [Open](https://colab.research.google.com/github/levshaazz/llm-serving-mastery-submission-example/blob/main/seminars/03-quantization-tradeoffs.ipynb) |
+| 04 · vLLM API | [local server and SDK lab](seminars/04-vllm-openai-serving.ipynb) | [Open](https://colab.research.google.com/github/levshaazz/llm-serving-mastery-submission-example/blob/main/seminars/04-vllm-openai-serving.ipynb) |
+
+Topics 03–04 deliberately use small, bounded smoke experiments. Their notebooks are structurally
+checked in CI but await an instructor GPU rehearsal; they do not contain claimed benchmark results.
+Set `LSM_MODEL_CACHE` to persistent storage if the runtime is ephemeral. Topics 02–04 default to
+ignored `.cache/models`; Topic 03 and Topic 04 reuse the same pinned 0.5B snapshot, while Topic 02
+also uses a pinned 1.5B snapshot. Later runs load these locally rather than downloading for every
+fresh server process. Keep caches and local logs
+out of Git; inspect evidence before publishing it.
 
 The [course site](https://levshaazz.github.io/llm-serving-mastery/) has the syllabus, deadlines,
 published thresholds, slides, required artifacts and acceptance checklists. Keep generated evidence

@@ -1,0 +1,30 @@
+name: Submission contract
+
+on:
+  push:
+    branches: [main]
+    tags: ['round-*']
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  validate:
+    name: Contract and reproducibility
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - uses: astral-sh/setup-uv@v6
+        with:
+          version: '0.8.15'
+      - run: python -m pip install PyYAML==6.0.2
+      - run: python scripts/validate_submission.py
+      - run: python -m unittest discover -s tests -v
+      - run: bash -n prepare.sh serve.sh
+      - run: shellcheck prepare.sh serve.sh
+      - run: uv lock --check

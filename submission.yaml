@@ -1,0 +1,6 @@
+# Filled in by you, read by the judge. Keep it true — it is printed on the public board.
+author: levshaazz
+model: Qwen/Qwen2.5-3B-Instruct      # Hugging Face id of the weights you serve
+model_revision: aa8e72537993ba99e69dfaafa59ed015b17504d1  # immutable commit, never main/latest
+stack: vllm                          # vllm | sglang | llama.cpp | tensorrt-llm | custom
+notes: maintained course example — plain vLLM defaults, FP16

@@ -1,0 +1,11 @@
+[project]
+name = "lsm-submission"
+version = "0.1.0"
+requires-python = ">=3.10,<3.13"
+dependencies = [
+  "vllm==0.29.0",
+]
+
+[tool.uv]
+# The judge and Colab are Linux x86_64 with NVIDIA GPUs; lock only for that.
+environments = ["sys_platform == 'linux' and platform_machine == 'x86_64'"]

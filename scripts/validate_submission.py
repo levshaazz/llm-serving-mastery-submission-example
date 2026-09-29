@@ -4,8 +4,10 @@
 from __future__ import annotations
 
 import argparse
+import os
 import re
 import stat
+import subprocess
 import sys
 import tomllib
 from pathlib import Path
@@ -23,6 +25,18 @@ REQUIRED = {
     "uv.lock",
 }
 REVISION = re.compile(r"^[0-9a-f]{40}$")
+
+
+def is_executable(script: Path) -> bool:
+    if os.name != "nt":
+        return bool(script.stat().st_mode & stat.S_IXUSR)
+    # NTFS does not expose the Git executable bit through stat. Check the index
+    # when this is a checkout; temporary test fixtures have no Git index.
+    result = subprocess.run(
+        ["git", "ls-files", "-s", "--", script.name],
+        cwd=script.parent, capture_output=True, text=True, check=False,
+    )
+    return result.returncode != 0 or not result.stdout.strip() or result.stdout.startswith("100755 ")
 SECRET_PATTERNS = {
     "GitHub classic token": re.compile(r"ghp_[A-Za-z0-9]{20,}"),
     "GitHub fine-grained token": re.compile(r"github_pat_[A-Za-z0-9_]{20,}"),
@@ -83,7 +97,7 @@ def validate(root: Path, *, allow_placeholder_author: bool = False) -> list[str]
         errors.append("JOURNAL.md: add at least one '## Round NN' entry")
 
     for script in (root / "prepare.sh", root / "serve.sh"):
-        if not script.stat().st_mode & stat.S_IXUSR:
+        if not is_executable(script):
             errors.append(f"{script.name}: file must be executable")
 
     ignored = {"uv.lock"}

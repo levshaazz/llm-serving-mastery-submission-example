@@ -1,7 +1,8 @@
 # LLM Serving Mastery — stable submission example
 
-Use this repository as the known-good starting point for your own leaderboard submission. Create a
-repository from it, replace the author and experiment notes, and keep the required CI check green.
+Use this public repository as the starting point for your own leaderboard submission and for the
+course notebooks. Create a repository from it, replace the author and experiment notes, and keep
+the required CI check green.
 The check validates the submission contract, immutable revisions, lockfile, shell syntax, and
 consistency between `submission.yaml` and the serving command before a tag is created.
 
@@ -45,10 +46,27 @@ the submitted commit.
 pip install uv                 # once
 uv lock                        # after every change to pyproject.toml — commit uv.lock
 bash serve.sh                  # starts the server on :8000
+# In a second terminal, when /v1/models is ready:
+python scripts/smoke_submission.py
 ```
 
-Self-check exactly like the judge: see `judge/README.md` in the course repository.
+The CI check verifies the public submission contract without a GPU. The smoke script checks model
+metadata and streaming on your GPU. Hidden quality, canary, latency and speed measurements run on
+the instructor's RTX 5070 Ti; your local result cannot predict a score there. A free Colab GPU is
+not guaranteed and may differ from the T4 used in the published demonstration. Tuesday dry-run logs
+show whether the current default branch starts on the judge GPU.
 
-This template is the **reference implementation**. Round 01 uses the verified config-v5 RTX 5070 Ti
-baseline published in `judge/reference/round-01.v5.result.json` and
-`judge/thresholds/round-01.json`.
+## Course notebooks
+
+| Topic | Notebook | Open in Colab |
+|---|---|---|
+| 00 · live demonstration | [pipeline vs vLLM](seminars/00-live-demo-pipeline-vs-vllm.ipynb) | [Open](https://colab.research.google.com/github/levshaazz/llm-serving-mastery-submission-example/blob/main/seminars/00-live-demo-pipeline-vs-vllm.ipynb) |
+| 01 · single-request baseline | [serving baseline](seminars/01-serving-system-baseline.ipynb) | [Open](https://colab.research.google.com/github/levshaazz/llm-serving-mastery-submission-example/blob/main/seminars/01-serving-system-baseline.ipynb) |
+| 02 · GPU bottlenecks | [profiler lab](seminars/02-gpu-profiling-and-bottlenecks.ipynb) | [Open](https://colab.research.google.com/github/levshaazz/llm-serving-mastery-submission-example/blob/main/seminars/02-gpu-profiling-and-bottlenecks.ipynb) |
+
+The [course site](https://levshaazz.github.io/llm-serving-mastery/) has the syllabus, deadlines,
+published thresholds, slides, required artifacts and acceptance checklists. Keep generated evidence
+in your own repository; never commit access tokens, model caches or weights.
+
+This template is the **reference implementation**. The [Round 01 leaderboard page](https://levshaazz.github.io/llm-serving-mastery/en/leaderboard/)
+publishes the verified config-v5 RTX 5070 Ti bars.

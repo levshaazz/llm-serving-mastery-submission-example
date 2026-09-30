@@ -3,6 +3,9 @@
 Use this public repository as the starting point for your own leaderboard submission and for the
 course notebooks. Create a repository from it, replace the author and experiment notes, and keep
 the required CI check green.
+
+**Start with [STUDENT_GUIDE.md](STUDENT_GUIDE.md)**: private copy including CI, access receipt,
+your own CUDA GPU, evidence files, Tuesday readiness Issue, round tag and support.
 The check validates the submission contract, immutable revisions, lockfile, shell syntax, and
 consistency between `submission.yaml` and the serving command before a tag is created.
 
@@ -53,7 +56,7 @@ evidence. Round 01 capture begins 9 October 2026 at 00:00 MSK.
 
 ```bash
 pip install uv                 # once
-uv lock                        # after every change to pyproject.toml — commit uv.lock
+uv lock --check                 # regenerate/commit only when dependencies change
 bash serve.sh                  # starts the server on :8000
 # In a second terminal, when /v1/models is ready:
 python scripts/smoke_submission.py
@@ -62,8 +65,11 @@ python scripts/smoke_submission.py
 The CI check verifies the public submission contract without a GPU. The smoke script checks model
 metadata and streaming on your GPU. Hidden quality, canary, latency and speed measurements run on
 the instructor's RTX 5070 Ti; your local result cannot predict a score there. A free Colab GPU is
-not guaranteed and may differ from the T4 used in the published demonstration. Tuesday dry-run logs
-show whether the current default branch starts on the judge GPU.
+not guaranteed. Students find their own CUDA GPU; instructor development slots are not promised.
+The manual Tuesday startup/smoke result is reviewed and returned in your private **Course readiness**
+Issue with its checked commit and time. It is not a quality/speed grade. General questions without
+private code or data go to this repository's Issues; individual diagnostics and appeals go to your
+private repository's Issue with **@levshaazz**. Never put raw logs or credentials in public Issues.
 
 ## Course notebooks
 

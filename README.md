@@ -6,7 +6,10 @@ the required CI check green.
 The check validates the submission contract, immutable revisions, lockfile, shell syntax, and
 consistency between `submission.yaml` and the serving command before a tag is created.
 
-Copy these files into your own **public** repository. Change anything except the contract:
+Copy these files into your own **private** repository (do not fork the public example if you need
+private visibility). Invite **levshaazz** via **Settings → Collaborators → Add people** and confirm
+the invitation is accepted. The judge needs read access; never send your own token. Only this generic
+example remains public. Change anything except the contract:
 
 | Fixed by the contract | |
 |---|---|
@@ -21,6 +24,11 @@ Copy these files into your own **public** repository. Change anything except the
 | `Dockerfile` | optional alternative; it must bake in dependencies/model artifacts because the scored container has no egress |
 
 Submit a round: `git tag round-01 && git push origin round-01` before **Thursday 23:59 Moscow time (MSK, UTC+3)**.
+
+First [register your private repository in the course sheet](https://docs.google.com/spreadsheets/d/1y6w_Ruf3Ofh5gBMFH3LUmgBmP6faaMUG/edit).
+Use the repository URL, not your profile URL; `submission.yaml` author must match its GitHub owner.
+Registration and green CI do not replace the round tag or accepted instructor access. Never put
+credentials in the sheet or repository.
 
 ## Submission calendar
 
@@ -37,8 +45,9 @@ Submit a round: `git tag round-01 && git push origin round-01` before **Thursday
 | 09 | `round-09` | 3 December 2026, 23:59 |
 | 10 | `round-10` | 10 December 2026, 23:59 |
 
-The judge snapshots the tag one minute after each deadline. Moving a tag afterwards does not change
-the submitted commit.
+Do not move the tag after the deadline. Capture starts one minute later; the judge records the
+actual capture time and commit SHA, then measures that frozen commit. Commit dates are not deadline
+evidence. Round 01 capture begins 9 October 2026 at 00:00 MSK.
 
 ## Quick start (Colab or any Linux box with an NVIDIA GPU)
 

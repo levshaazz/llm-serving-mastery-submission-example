@@ -144,6 +144,7 @@ def run_lab(snapshot,output_path):
 def validate_artifact(data):
     def require(value,message):
         if not value: raise ValueError(message)
+    def finite_number(value): return type(value) in (int,float) and math.isfinite(value)
     require(data.get('contract')==PROTOCOL and data.get('status')=='complete','incomplete or wrong protocol')
     require(data.get('revision')==REVISION and data.get('model_id')==MODEL_ID,'model identity')
     require(data.get('transformers')=='4.51.3' and data.get('bitsandbytes')=='0.50.2','runtime pins')
@@ -152,6 +153,10 @@ def validate_artifact(data):
     require(data.get('trials')==TRIALS and data.get('max_new_tokens')==MAX_NEW,'trial budget')
     require(data.get('quality_mode')=='natural_eos' and data.get('timing_mode')=='fixed_output_length','separate quality/timing')
     require(set(data.get('formats',{}))=={'fp16','nf4_w4a16'},'paired formats')
+    resources=data.get('resource_samples',[])
+    require(len(resources)==3,'preflight and two cleanup samples')
+    require(all(finite_number(r.get('available_ram_gib')) and r['available_ram_gib']>=24 and
+                type(r.get('device_used_mib')) is int and 0<=r['device_used_mib']<=12288 for r in resources),'resource envelope')
     paired=[]
     for label in ('fp16','nf4_w4a16'):
         entry=data['formats'][label]
@@ -160,7 +165,9 @@ def validate_artifact(data):
         require(all(type(entry.get(key)) is int and entry[key]>=0 for key in ('peak_allocated_bytes','peak_reserved_bytes','baseline_allocated_bytes','post_cleanup_allocated_bytes')),'finite integer byte counters')
         require(0<entry['peak_allocated_bytes']<=entry['peak_reserved_bytes'],'allocator counters')
         require(entry.get('cleanup_verified') is True and entry['post_cleanup_allocated_bytes']<=entry['baseline_allocated_bytes']+64*2**20,'cleanup verified')
-        require(math.isfinite(entry['load_s']) and entry['load_s']>0,'load clock')
+        require(finite_number(entry['load_s']) and entry['load_s']>0,'load clock')
+        require(isinstance(entry.get('eos_token_ids'),list) and bool(entry['eos_token_ids']) and
+                all(type(x) is int and x>=0 for x in entry['eos_token_ids']),'EOS identity')
         inputs=[]
         for case,row in zip(PROMPTS,entry['rows']):
             require(row['bucket']==case['bucket'] and row['prompt']==case['text'],'paired literal prompt')
@@ -171,9 +178,10 @@ def validate_artifact(data):
                 require(sample['output_tokens']==len(sample['output_token_ids'])==len(sample['output_token_pieces'])>0,'output IDs/count')
                 require(all(type(x) is int and x>=0 for x in sample['input_token_ids']+sample['output_token_ids']),'token ID types')
                 require(sample['input_token_ids']==samples[0]['input_token_ids'] and sample['rendered_chat']==samples[0]['rendered_chat'],'within-prompt identity')
-                require(math.isfinite(sample['wall_s']) and math.isfinite(sample['ttft_s']) and 0<sample['ttft_s']<=sample['wall_s'],'finite ordered clocks')
+                require(finite_number(sample['wall_s']) and finite_number(sample['ttft_s']) and 0<sample['ttft_s']<=sample['wall_s'],'finite ordered clocks')
                 expected=(sample['wall_s']-sample['ttft_s'])/(sample['output_tokens']-1) if sample['output_tokens']>1 else None
-                require(sample['post_first_s_per_token']==expected,'post-first denominator')
+                require((sample['post_first_s_per_token'] is None if expected is None else
+                         finite_number(sample['post_first_s_per_token']) and sample['post_first_s_per_token']==expected),'post-first denominator')
                 require(sample['output_tokens']<=MAX_NEW,'bounded output')
                 if index: require(sample['output_tokens']==MAX_NEW and sample['stop_reason']=='fixed_length','fixed timing length')
                 else:

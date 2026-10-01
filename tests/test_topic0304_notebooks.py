@@ -66,7 +66,12 @@ class Topic0304NotebookTests(unittest.TestCase):
             lambda x:x['formats']['fp16']['rows'][0]['timing_trials'][0].update(output_tokens=23),
             lambda x:x['formats']['fp16']['rows'][0]['quality_sample'].update(stop_reason='fixed_length'),
             lambda x:x['formats']['nf4_w4a16']['rows'][0]['quality_sample']['input_token_ids'].__setitem__(0,999),
-            lambda x:x['formats']['fp16']['rows'][0].update(p95_ttft_s=999)]
+            lambda x:x['formats']['fp16']['rows'][0].update(p95_ttft_s=999),
+            lambda x:x['formats']['fp16'].update(load_s=True),
+            lambda x:x['formats']['fp16'].update(eos_token_ids=[True]),
+            lambda x:x['formats']['fp16']['rows'][0]['timing_trials'][0].update(ttft_s=True,wall_s=True,post_first_s_per_token=0),
+            lambda x:x['resource_samples'][0].update(device_used_mib=True),
+            lambda x:x['resource_samples'][0].update(available_ram_gib=23)]
         for mutate in mutations:
             bad=copy.deepcopy(original); mutate(bad)
             with self.assertRaises((ValueError,KeyError,TypeError)): validate(bad)
@@ -82,7 +87,22 @@ class Topic0304NotebookTests(unittest.TestCase):
             lambda x:x['nonstream']['usage'].update(total_tokens=0),
             lambda x:x['sdk_stream'].update(first_content_s=-1),
             lambda x:x['teardown'].update(owned_process_group_stopped=False),
-            lambda x:x['negative']['wrong_model'].update(status=200)]
+            lambda x:x['negative']['wrong_model'].update(status=200),
+            lambda x:x['raw_sse']['request'].update(max_tokens=32),
+            lambda x:x['raw_sse']['request'].update(temperature=1),
+            lambda x:x['raw_sse']['request']['stream_options'].update(include_usage=False),
+            lambda x:x['nonstream']['request'].update(model='wrong'),
+            lambda x:x['nonstream']['usage'].update(completion_tokens=float(x['nonstream']['usage']['completion_tokens'])),
+            lambda x:x['limits'].update(gpu_memory_utilization=.9),
+            lambda x:x['launch_args'].__setitem__(5,'0.0.0.0'),
+            lambda x:x.update(startup_s=True),
+            lambda x:x['teardown'].update(owned_process_group_stopped=1),
+            lambda x:x['resource_samples'][-1].update(device_used_mib=x['resource_samples'][0]['device_used_mib']+65),
+            lambda x:x['raw_sse']['request'].update(temperature=False),
+            lambda x:x['raw_sse']['request'].update(stream=1),
+            lambda x:x['raw_sse']['request']['stream_options'].update(include_usage=1),
+            lambda x:x['negative']['wrong_model'].update(status=404.0),
+            lambda x:x['negative']['over_context'].update(rendered_prompt_tokens=2329.0)]
         for mutate in mutations:
             bad=copy.deepcopy(original); mutate(bad)
             with self.assertRaises((ValueError,KeyError,TypeError)): validate(bad)

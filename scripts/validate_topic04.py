@@ -411,10 +411,27 @@ def validate_artifact(data):
     import math
     def require(value,message):
         if not value: raise ValueError(message)
+    def finite_number(value): return type(value) in (int,float) and math.isfinite(value)
+    def usage_counts(usage):
+        return isinstance(usage,dict) and all(type(usage.get(k)) is int and usage[k]>=0
+            for k in ('prompt_tokens','completion_tokens','total_tokens')) and usage['completion_tokens']>0
     require(data.get('contract')==PROTOCOL and data.get('status')=='complete','incomplete/wrong protocol')
     require(data.get('revision')==REVISION and data.get('model_id')==MODEL_ID,'model identity')
     require(data.get('vllm')=='0.29.0' and all(isinstance(data.get(key),str) and data[key] for key in ('openai_sdk','httpx','transformers','torch','cuda','gpu')),'runtime pins/identity')
     require(data.get('served_name')==SERVED_NAME and SERVED_NAME in data.get('advertised_models',[]),'served identity')
+    expected_limits=dict(max_model_len=2048,max_num_seqs=4,gpu_memory_utilization=.45)
+    require(data.get('limits')==expected_limits,'fixed bounded launch limits')
+    require(type(data['limits']['max_model_len']) is int and type(data['limits']['max_num_seqs']) is int and
+            finite_number(data['limits']['gpu_memory_utilization']),'numeric launch limit types')
+    expected_launch=['serve','<pinned-local-snapshot>','--served-model-name',SERVED_NAME,'--host','127.0.0.1','--port','8000',
+                     '--dtype','float16','--max-model-len','2048','--max-num-seqs','4','--gpu-memory-utilization','0.45','--enforce-eager']
+    require(data.get('launch_args')==expected_launch,'exact loopback bounded launch')
+    require(type(data.get('wsl_v1_runner_fallback')) is bool,'explicit WSL fallback')
+    require(finite_number(data.get('startup_s')) and 0<data['startup_s']<=300,'bounded startup clock')
+    expected_request=dict(model=SERVED_NAME,messages=[dict(role='user',content=PROMPT)],max_tokens=48,temperature=0)
+    require(data['nonstream'].get('request')==expected_request,'exact nonstream request envelope')
+    require(type(data['nonstream']['request']['max_tokens']) is int and
+            finite_number(data['nonstream']['request']['temperature']),'nonstream envelope numeric types')
     for key,text in [('request_prompt',PROMPT),('raw_prompt',RAW_PROMPT)]:
         prompt=data[key]
         require(prompt['messages']==[dict(role='user',content=text)],'literal request')
@@ -424,22 +441,32 @@ def validate_artifact(data):
         result=data[key]
         require(isinstance(result.get('content'),str) and bool(result['content']),'content required')
         require(result.get('finish_reason') in ('stop','length'),'finish reason')
-        require(math.isfinite(result['wall_s']) and result['wall_s']>0,'wall clock')
-    require(0<data['sdk_stream']['first_content_s']<=data['sdk_stream']['wall_s'],'first content clock')
+        require(finite_number(result['wall_s']) and result['wall_s']>0,'wall clock')
+    require(finite_number(data['sdk_stream']['first_content_s']) and 0<data['sdk_stream']['first_content_s']<=data['sdk_stream']['wall_s'],'first content clock')
     raw=data['raw_sse']; replay=ChatStream()
     for chunk in raw['chunks']: replay.feed(bytes.fromhex(chunk['hex']),chunk['at_s'])
     reconstructed=replay.finish()
     require(all(raw[key]==value for key,value in reconstructed.items()),'raw byte replay mismatch')
     require(raw['http_status']==200 and raw['content_type']=='text/event-stream','SSE HTTP boundary')
     require(raw['status']=='complete' and raw['done'] and raw['content'],'partial stream is not success')
+    expected_raw=dict(model=SERVED_NAME,messages=[dict(role='user',content=RAW_PROMPT)],max_tokens=16,temperature=0,
+                      stream=True,stream_options=dict(include_usage=True))
+    require(raw.get('request')==expected_raw,'exact raw request envelope')
+    require(type(raw['request']['max_tokens']) is int and finite_number(raw['request']['temperature']) and
+            raw['request']['stream'] is True and raw['request']['stream_options']['include_usage'] is True,'raw envelope types')
     require(raw['request']['messages']==data['raw_prompt']['messages'],'raw prompt identity')
-    require(raw['usage'] is not None and raw['usage']['prompt_tokens']==data['raw_prompt']['prompt_tokens'],'raw usage vs tokenizer')
+    require(usage_counts(raw['usage']) and raw['usage']['prompt_tokens']==data['raw_prompt']['prompt_tokens'],'raw usage vs tokenizer')
     usage=data['nonstream']['usage']
-    require(usage['prompt_tokens']==data['request_prompt']['prompt_tokens'] and usage['total_tokens']==usage['prompt_tokens']+usage['completion_tokens'],'nonstream usage')
-    require(data['teardown']['owned_process_group_stopped'],'owned server teardown')
+    require(usage_counts(usage) and usage['prompt_tokens']==data['request_prompt']['prompt_tokens'] and usage['total_tokens']==usage['prompt_tokens']+usage['completion_tokens'],'nonstream usage')
+    require(data['teardown'].get('owned_process_group_stopped') is True and type(data['teardown'].get('server_returncode')) is int,'owned server teardown')
+    resources=data.get('resource_samples',[])
+    require(len(resources)==2 and all(finite_number(r.get('available_ram_gib')) and r['available_ram_gib']>=24 and
+                type(r.get('device_used_mib')) is int and 0<=r['device_used_mib']<=12288 for r in resources),'resource envelope')
+    require(resources[-1]['device_used_mib']<=resources[0]['device_used_mib']+64,'device allocation recovered after teardown')
     require(set(data['negative'])=={'wrong_model','over_context'},'negative probes')
-    require(all(400<=row['status']<500 for row in data['negative'].values()),'negative 4xx')
-    require(2048<data['negative']['over_context']['rendered_prompt_tokens']<8192,'bounded token rejection')
+    require(all(type(row['status']) is int and 400<=row['status']<500 for row in data['negative'].values()),'negative 4xx')
+    require(type(data['negative']['over_context']['rendered_prompt_tokens']) is int and
+            2048<data['negative']['over_context']['rendered_prompt_tokens']<8192,'bounded token rejection')
     return True
 
 

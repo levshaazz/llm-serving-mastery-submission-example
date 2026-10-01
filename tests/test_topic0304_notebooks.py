@@ -6,7 +6,9 @@ import io
 import json
 from pathlib import Path
 import socket
+import subprocess
 import sys
+import tempfile
 import unittest
 from unittest.mock import patch
 
@@ -16,6 +18,25 @@ NOTEBOOK_ROOT=ROOT if (ROOT/'seminars').exists() else ROOT.parent
 
 
 class Topic0304NotebookTests(unittest.TestCase):
+    def test_nested_attempt_logs_are_ignored_but_artifacts_are_not(self):
+        rules=(ROOT/'.gitignore').read_text(encoding='utf-8')
+        with tempfile.TemporaryDirectory() as directory:
+            subprocess.run(['git','init','-q',directory],check=True,capture_output=True)
+            ignore=Path(directory)/'.gitignore'
+            ignore.write_text(rules,encoding='utf-8')
+            def ignored(path):
+                result=subprocess.run(['git','-C',directory,'check-ignore','--no-index','--quiet',path],capture_output=True)
+                self.assertIn(result.returncode,(0,1),result.stderr)
+                return result.returncode==0
+            path='evidence/topic04-20261002T010000Z/server.local.log'
+            self.assertTrue(ignored(path))
+            self.assertTrue(ignored('evidence/topic-04-server.local.log'))
+            self.assertTrue(ignored('.cache/models/config.json'))
+            self.assertFalse(ignored('evidence/topic-04-service.json'))
+            self.assertFalse(ignored('evidence/topic03-20261002T010000Z/comparison.json'))
+            ignore.write_text(rules.replace('evidence/**/*.local.log\n',''),encoding='utf-8')
+            self.assertFalse(ignored(path),'Old one-level pattern must fail nested-log fixture')
+
     def load(self,topic):
         path=NOTEBOOK_ROOT/'seminars'/({'03':'03-quantization-tradeoffs.ipynb','04':'04-vllm-openai-serving.ipynb'}[topic])
         data=json.loads(path.read_text(encoding='utf-8'))

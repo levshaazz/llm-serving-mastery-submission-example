@@ -82,15 +82,31 @@ private repository's Issue with **@levshaazz**. Never put raw logs or credential
 | 04 · vLLM API | [local server and SDK lab](seminars/04-vllm-openai-serving.ipynb) | [Open](https://colab.research.google.com/github/levshaazz/llm-serving-mastery-submission-example/blob/main/seminars/04-vllm-openai-serving.ipynb) |
 
 Topics 03–04 deliberately use small, bounded smoke experiments. All Topics 01–04 notebooks have
-passed a sequential offline instructor GPU rehearsal on an RTX 5070 Ti. The notebooks themselves
-contain no prefilled results; the reviewed instructor evidence and limitations are linked from the
+passed sequential offline instructor GPU rehearsals on an RTX 5070 Ti. The notebooks have no executed
+cell outputs; Topics 02–04 embed explicitly labeled recorded instructor evidence for CPU/offline
+replay. These recordings are not evidence that you performed the required GPU lab. Evidence limits are on the
 [course provenance page](https://levshaazz.github.io/llm-serving-mastery/en/provenance/).
-Set `LSM_MODEL_CACHE` to persistent storage if the runtime is ephemeral. Topics 02–04 default to
-ignored `.cache/models`; Topic 03 and Topic 04 reuse the same pinned 0.5B snapshot, while Topic 02
+Set `LSM_MODEL_CACHE` to persistent storage if the runtime is ephemeral. Topics 03–04 default to
+ignored `.cache/models` (Topic 02 defaults to `~/.cache/lsm-models`); Topic 03 and Topic 04 reuse the same pinned 0.5B snapshot, while Topic 02
 also uses a pinned 1.5B snapshot. Topic 01 shares the same durable-cache behavior. Matching pinned
 packages are reused without reinstalling on every notebook execution. Later runs load pinned models
 locally rather than downloading for every fresh server process. Keep caches and local logs
 out of Git; inspect evidence before publishing it.
+
+Topics 03–04 now start with three executable CPU/offline cells: a complete INT4 arithmetic example
+or fragmented UTF-8/SSE parser, then recorded real model/API evidence. Their bounded v3 GPU workloads
+are unchanged, with incremental checkpoints and owned-server teardown. The canonical helpers require
+Linux/WSL, an idle CUDA GPU and at least 24 GiB available host RAM. Do not lower resource gates to force
+a run. After your own successful run:
+
+```bash
+python scripts/validate_topic03.py evidence/topic-03-comparison.json
+python scripts/validate_topic04.py evidence/topic-04-service.json
+```
+
+Validators check identity, raw counts/clocks, completion and artifact consistency—not semantic quality,
+speed or a leaderboard score. Keep `topic-03-decision.md` and `topic-04-analysis.md` alongside the JSON
+in `evidence/`. Preserve failed attempts and never publish raw local server logs.
 
 The [course site](https://levshaazz.github.io/llm-serving-mastery/) has the syllabus, deadlines,
 published thresholds, slides, required artifacts and acceptance checklists. Keep generated evidence

@@ -82,6 +82,21 @@ The trace names client, gateway, scheduler and worker boundaries. Mark events yo
 notebook without credentials or cached weights. Study Topic 02 and save its artifacts as listed on
 its topic page. Keep `JOURNAL.md` as the record of changes, measurements and failed hypotheses.
 
+Topics 03–04 begin with CPU-only worked examples and explicitly labeled recorded instructor
+replays. Those cells need no network, weights or GPU; they do not count as your own experiment.
+Their bounded CUDA routes require Linux/WSL, an idle GPU and at least 24 GiB available host RAM.
+Keep the paired natural-EOS/forced-length evidence separate in Topic 03, and complete/partial/failed
+streams separate in Topic 04. After your own successful run, validate the JSON before submission:
+
+```bash
+python scripts/validate_topic03.py evidence/topic-03-comparison.json
+python scripts/validate_topic04.py evidence/topic-04-service.json
+```
+
+Include `evidence/topic-03-decision.md` and `evidence/topic-04-analysis.md` as directed in the notebooks.
+Passing these CPU validators proves artifact consistency, not production quality, speed or a score.
+Preserve failed attempts locally, stop on resource pressure, and never delete model caches to retry.
+
 ## 5. Run the GPU streaming smoke
 
 On Linux or a suitable Colab environment, run `bash serve.sh` from your submission checkout.

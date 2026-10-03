@@ -8,6 +8,12 @@ also live in `teaching/` and `public/downloads/`. The older
 `03-quantization-tradeoffs.ipynb` remains historical, not the required current route.
 The revised code passed a technical Colab T4 rehearsal; learner validation is separate.
 
+The NPZ derives from Qwen/Qwen2.5-0.5B-Instruct revision
+`7ae557604adf67be50417f59c2c2f167def9a775`, Copyright 2024 Alibaba Cloud,
+Apache License 2.0; the exact [upstream license](public/downloads/QWEN-LICENSE.txt) is included.
+Modification: export of layer-12 MLP down-projection rows 0–63 as FP16 arrays,
+plus recorded FP32 user-position activations. This is not a complete checkpoint.
+
 Use this public repository as the starting point for your own leaderboard submission and for the
 course notebooks. Create a repository from it, replace the author and experiment notes, and keep
 the required CI check green.

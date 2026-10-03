@@ -69,6 +69,10 @@ class Topic02RecapNotebookTests(unittest.TestCase):
         self.assertIn("CPU FP32 reconstruction; not observed SDPA weights", output.getvalue())
         self.assertIn("ILLUSTRATIVE", output.getvalue())
         self.assertIn("pip", self.code[4])
+        self.assertEqual(namespace["CACHE_AB"]["baseline"]["qkv_projection_row_calls"],1395)
+        self.assertEqual(namespace["CACHE_AB"]["cached"]["qkv_projection_row_calls"],153)
+        self.assertLess(namespace["CACHE_AB"]["max_abs_logit_difference"],1e-12)
+        self.assertAlmostEqual(namespace["ONLINE"]["states"][-1]["output"][0],27/7)
 
     def test_optional_live_is_off_and_preserves_protocol_namespace(self):
         source = next(code for code in self.code if "RUN_CONCRETE_PROMPT_LIVE =" in code)

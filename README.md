@@ -1,5 +1,13 @@
 # LLM Serving Mastery — stable submission example
 
+Topic 03 starts with your own grouped quantizer and real Qwen weights/activations,
+then a calibration-only choice, held-out check and a separate FP16/NF4 GPU A/B.
+Download the [complete lab ZIP](https://levshaazz.github.io/llm-serving-mastery/downloads/topic03-pilot.zip);
+in Colab upload `topic03_pilot.py` and `topic03-real-layer.npz` from it. Local copies
+also live in `teaching/` and `public/downloads/`. The older
+`03-quantization-tradeoffs.ipynb` remains historical, not the required current route.
+The revised code passed a technical Colab T4 rehearsal; learner validation is separate.
+
 Use this public repository as the starting point for your own leaderboard submission and for the
 course notebooks. Create a repository from it, replace the author and experiment notes, and keep
 the required CI check green.
@@ -78,7 +86,7 @@ private repository's Issue with **@levshaazz**. Never put raw logs or credential
 | 00 · live demonstration | [pipeline vs vLLM](seminars/00-live-demo-pipeline-vs-vllm.ipynb) | [Open](https://colab.research.google.com/github/levshaazz/llm-serving-mastery-submission-example/blob/main/seminars/00-live-demo-pipeline-vs-vllm.ipynb) |
 | 01 · single-request baseline | [serving baseline](seminars/01-serving-system-baseline.ipynb) | [Open](https://colab.research.google.com/github/levshaazz/llm-serving-mastery-submission-example/blob/main/seminars/01-serving-system-baseline.ipynb) |
 | 02 · GPU bottlenecks | [profiler lab](seminars/02-gpu-profiling-and-bottlenecks.ipynb) | [Open](https://colab.research.google.com/github/levshaazz/llm-serving-mastery-submission-example/blob/main/seminars/02-gpu-profiling-and-bottlenecks.ipynb) |
-| 03 · quantization | [FP16/NF4 paired lab](seminars/03-quantization-tradeoffs.ipynb) | [Open](https://colab.research.google.com/github/levshaazz/llm-serving-mastery-submission-example/blob/main/seminars/03-quantization-tradeoffs.ipynb) |
+| 03 · quantization | [One matrix, four bits: required investigation](seminars/03-quantization-pilot.ipynb) | [Open](https://colab.research.google.com/github/levshaazz/llm-serving-mastery-submission-example/blob/main/seminars/03-quantization-pilot.ipynb) |
 | 04 · vLLM API | [local server and SDK lab](seminars/04-vllm-openai-serving.ipynb) | [Open](https://colab.research.google.com/github/levshaazz/llm-serving-mastery-submission-example/blob/main/seminars/04-vllm-openai-serving.ipynb) |
 
 Topics 03–04 deliberately use small, bounded smoke experiments. All Topics 01–04 notebooks have

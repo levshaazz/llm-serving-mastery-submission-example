@@ -4,6 +4,7 @@
 import ast
 import json
 import re
+import subprocess
 from pathlib import Path
 
 
@@ -19,7 +20,29 @@ def main() -> None:
         if data.get("nbformat") != 4 or not data.get("cells"):
             raise ValueError(f"{path.name}: invalid or empty notebook")
         all_source = "".join("".join(cell.get("source", [])) for cell in data["cells"])
-        if path.name.startswith(("01-", "02-", "03-", "04-")):
+        pilot = path.name == "03-quantization-pilot.ipynb"
+        if pilot:
+            # This independent teaching protocol has student TODOs and an opt-in
+            # runner. Do not accidentally impose the archived v3 runner's schema
+            # on every file beginning with 03-, or silently skip the new contract.
+            # Portable mirror gate: never depend on private course JS modules.
+            roles = [c.get("metadata", {}).get("pilot_role") for c in data["cells"]]
+            for role in ("student-scale", "student-groups", "real-calibration", "real-held-out", "gpu-optin"):
+                if roles.count(role) != 1:
+                    raise ValueError(f"{path.name}: missing/duplicate pilot role {role}")
+            if not roles.index("real-calibration") < roles.index("real-held-out") < roles.index("gpu-optin"):
+                raise ValueError("calibration, held-out, GPU order changed")
+            for term in ("def derive_scale(", "def quantize_groups(", "raise NotImplementedError",
+                         "REAL_SIZES = [None]", "CHOSEN_GROUP = None", "output_error = None",
+                         "RUN_GPU = False", "allow_pickle=False", "4.30", "topic03-layer-decision.json"):
+                if term not in all_source:
+                    raise ValueError(f"{path.name}: student contract missing {term}")
+            import hashlib
+            for name, key in (("topic03_pilot.py", "runner_sha256"),):
+                local = ROOT / "teaching" / name
+                if local.exists() and hashlib.sha256(local.read_bytes()).hexdigest() != data["metadata"]["topic03_pilot"][key]:
+                    raise ValueError(f"{path.name}: mismatched runner")
+        if not pilot and path.name.startswith(("01-", "02-", "03-", "04-")):
             if not all(term in all_source for term in ("LSM_MODEL_CACHE", "snapshot_download", "local_files_only=True")):
                 raise ValueError(f"{path.name}: persistent pinned local model cache contract missing")
             if "local_dir=MODEL_DIR" in all_source or not re.search(r"[0-9a-f]{40}", all_source):
@@ -31,7 +54,7 @@ def main() -> None:
             term in all_source for term in ("worker.join(timeout=30)", "TextIteratorStreamer", "timeout=30")
         ):
             raise ValueError(f"{path.name}: streaming thread needs a bounded timeout")
-        if path.name.startswith("03-") and not all(
+        if not pilot and path.name.startswith("03-") and not all(
             term in all_source for term in ("topic-03-paired-smoke-v3", "quality_sample", "timing_trials", "min_new_tokens", "natural_eos", "fixed_output_length", "cleanup_verified", "checkpoint(output_path,data)", "validate_artifact", "RECORDED_QUANTIZATION", "toy_namespace")
         ):
             raise ValueError(f"{path.name}: canonical paired v3 clock/quality/checkpoint/CPU contract missing")

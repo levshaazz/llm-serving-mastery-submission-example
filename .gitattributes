@@ -1,0 +1,6 @@
+# The notebook verifies these exact bytes, including on Windows checkouts.
+teaching/topic03_pilot.py text eol=lf
+teaching/topic03_pilot_exercises.py text eol=lf
+seminars/03-quantization-pilot.ipynb text eol=lf
+public/downloads/*.npz binary
+public/downloads/QWEN-LICENSE.txt text eol=lf

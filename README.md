@@ -6,7 +6,11 @@ Download the [complete lab ZIP](https://levshaazz.github.io/llm-serving-mastery/
 in Colab upload `topic03_pilot.py` and `topic03-real-layer.npz` from it. Local copies
 also live in `teaching/` and `public/downloads/`. The older
 `03-quantization-tradeoffs.ipynb` remains historical, not the required current route.
-The revised code passed a technical Colab T4 rehearsal; learner validation is separate.
+The audited v4 scientific CPU notebook passed with instructor solutions. Its new
+GPU/storage-ledger rehearsal remains pending; the dated v3 T4 receipt does not
+certify changed code. Learner validation is also pending, independently.
+The lab now compares grouping, calibration-selected clipping and supplied NF4
+on the same weights/inputs before the separate whole-model GPU A/B.
 
 The NPZ derives from Qwen/Qwen2.5-0.5B-Instruct revision
 `7ae557604adf67be50417f59c2c2f167def9a775`, Copyright 2024 Alibaba Cloud,

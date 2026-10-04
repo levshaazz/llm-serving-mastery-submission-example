@@ -1,7 +1,7 @@
 """Mechanism-first Topic 03 starter: two CPU-only student edits, no GPU import."""
 import math
 
-WEIGHTS = [[.49, .40, .60, 7.], [-.30, -.60, .90, -1.40]]
+WEIGHTS = [[.49, .40, .60, 7.], [-.31, -.60, .92, -1.40]]
 INPUTS = [[1., 1., 0., 0.], [0., 1., 0., 0.]]
 HELD_OUT = [[10., 0., 0., 1.]]
 
@@ -88,10 +88,41 @@ def test_groups(function):
         result = function(WEIGHTS, size)
         assert len(result['scales']) == len(expected)
         assert all(math.isclose(a,b,abs_tol=1e-12) for a,b in zip(result['scales'],expected))
+    # Check EVERY reconstructed weight, independently of the returned scales.
+    # Different row ranges expose global restoration disguised as row-local.
+    for matrix in [WEIGHTS, [[.1,.2,7.],[-.4,-.5,-.6]], [[0.,0.,0.],[1.,-2.,3.]]]:
+        before = copy.deepcopy(matrix)
+        for size in [None, 1, 2, len(matrix[0]), len(matrix[0])+1]:
+            result = function(matrix, size)
+            assert len(result['restored']) == len(matrix)
+            expected_count = 1 if size is None else len(matrix)*math.ceil(len(matrix[0])/size)
+            assert len(result['scales']) == expected_count, 'Each row owns its tail scale'
+            global_max = max(abs(v) for row in matrix for v in row)
+            scale_index = 0
+            for row, restored in zip(matrix, result['restored']):
+                assert len(restored) == len(row)
+                width = size or len(row)
+                for start in range(0, len(row), width):
+                    values = row[start:start+width]
+                    maximum = global_max if size is None else max(abs(v) for v in values)
+                    scale = maximum/7 if maximum else 1.
+                    actual_scale = result['scales'][0 if size is None else scale_index]
+                    assert math.isclose(actual_scale, scale, rel_tol=1e-12, abs_tol=1e-12)
+                    for offset, value in enumerate(values):
+                        expected = max(-8, min(7, round(value/scale)))*scale
+                        assert math.isclose(restored[start+offset], expected, rel_tol=1e-12, abs_tol=1e-12), 'Wrong group reconstruction'
+                    scale_index += 1
+            assert matrix == before, 'Do not mutate any input matrix'
     group = function(WEIGHTS, 2)
     assert math.isclose(group['restored'][0][1], .42, abs_tol=1e-12)
-    assert math.isclose(compare(WEIGHTS, whole, INPUTS)['output_mse'], .280525, abs_tol=1e-12)
-    assert math.isclose(compare(WEIGHTS, group, INPUTS)['output_mse'], .0006591836734693878, abs_tol=1e-12)
+    # Output reduction is checked from all restored entries, not a magic loss.
+    probe = [[1.,2.,3.,4.], [-1.,0.,2.,-3.]]
+    for result in [whole, group]:
+        expected = [[sum((q-w)*x for q,w,x in zip(qrow,wrow,vector))
+                     for qrow,wrow in zip(result['restored'], WEIGHTS)] for vector in probe]
+        measured = compare(WEIGHTS, result, probe)
+        assert measured['signed_output_error'] == expected
+        assert math.isclose(measured['output_mse'], sum(v*v for row in expected for v in row)/4)
     tail = function([[.1,.2,7.],[.4,.5,.6]], 2)
     assert len(tail['scales']) == 4, 'Tail group cannot cross rows'
     assert [len(row) for row in tail['restored']] == [3,3]

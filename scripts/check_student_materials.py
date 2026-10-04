@@ -34,7 +34,9 @@ def main() -> None:
                 raise ValueError("calibration, held-out, GPU order changed")
             for term in ("def derive_scale(", "def quantize_groups(", "raise NotImplementedError",
                          "REAL_SIZES = [None]", "CHOSEN_GROUP = None", "output_error = None",
-                         "RUN_GPU = False", "allow_pickle=False", "4.30", "topic03-layer-decision.json"):
+                         "RUN_GPU = False", "allow_pickle=False", "4.30", "topic03-layer-decision.json",
+                         "CLIP_CANDIDATES = (100, 99, 99.5)", "CHOSEN_CLIP = None",
+                         "NF4_RESTORED = nf4_qdq(W_REAL)", "FROZEN_CHOICE = json.dumps"):
                 if term not in all_source:
                     raise ValueError(f"{path.name}: student contract missing {term}")
             import hashlib

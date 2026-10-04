@@ -240,6 +240,23 @@ def run(output, lengths=(24, 96), trials=5, order=('fp16', 'nf4'), timeout_s=600
                      'baseline_allocated_bytes': before,
                      'quantized_linear_modules': sum(type(module).__name__ == 'Linear4bit' for module in model.modules()),
                      'timing_trials': [], 'quality_samples': [], 'summaries': {}}
+            # Actual storage, before clocks; no per-layer weight values exported.
+            ledger = []
+            state = None
+            for name, module in model.named_modules():
+                if type(module).__name__ != 'Linear4bit':
+                    continue
+                state = module.weight.quant_state
+                ledger.append(dict(module=name, shape_out_in=list(state.shape),
+                    blocksize=state.blocksize, quant_type=state.quant_type,
+                    absmax_dtype=str(state.absmax.dtype), absmax_count=state.absmax.numel(),
+                    absmax_bytes=state.absmax.numel()*state.absmax.element_size(),
+                    packed_dtype=str(module.weight.dtype),
+                    packed_bytes=module.weight.numel()*module.weight.element_size(),
+                    nested=bool(state.nested), compute_dtype=str(module.compute_dtype)))
+            entry['quantization_ledger'] = ledger
+            data['storage_ledger_revision'] = 'module-storage-v1'
+            del module, state  # Do not keep the last module alive past model cleanup.
             eos = model.generation_config.eos_token_id
             entry['eos_token_ids'] = eos if isinstance(eos, list) else [eos]
             data['formats'][label] = entry
@@ -333,12 +350,27 @@ def validate_artifact(data):
                 for key in ['torch', 'cuda', 'gpu', 'driver']), 'runtime identity')
     require(number(data.get('elapsed_s')) and type(data.get('final_allocated_bytes')) is int, 'execution/cleanup')
     paired_inputs = []
+    ledger_required = data.get('storage_ledger_revision') == 'module-storage-v1' or data.get('source_sha256') == hashlib.sha256(Path(__file__).read_bytes()).hexdigest()
     for label, entry in data['formats'].items():
         require(entry.get('status') == 'complete' and entry.get('cleanup_verified') is True, 'format completed')
         require(number(entry.get('load_s')), 'load clock')
         require(entry.get('quantized_linear_modules') == 0 if label == 'fp16' else
                 type(entry.get('quantized_linear_modules')) is int and entry['quantized_linear_modules'] > 0,
                 'actual quantized module treatment')
+        if ledger_required or 'quantization_ledger' in entry:
+            ledger = entry.get('quantization_ledger')
+            require(isinstance(ledger, list) and len(ledger) == entry['quantized_linear_modules'], 'complete module storage ledger')
+            require(len({r.get('module') for r in ledger}) == len(ledger), 'unique storage ledger modules')
+            for row in ledger:
+                shape = row.get('shape_out_in', [])
+                require(len(shape) == 2 and all(type(n) is int and n > 0 for n in shape), 'storage weight shape')
+                count = math.prod(shape)
+                require(row.get('blocksize') == 64 and row.get('quant_type') == 'nf4' and row.get('nested') is False,
+                        'actual NF4 block size and double-quant setting')
+                require(row.get('absmax_dtype') == 'torch.float32' and row.get('absmax_count') == math.ceil(count/64) and
+                        row.get('absmax_bytes') == 4*math.ceil(count/64), 'actual FP32 absmax storage')
+                require(row.get('packed_dtype') == 'torch.uint8' and row.get('packed_bytes') == math.ceil(count/2) and
+                        row.get('compute_dtype') == 'torch.float16', 'actual packed weight storage and compute dtype')
         require(type(entry.get('baseline_allocated_bytes')) is int and entry['baseline_allocated_bytes'] >= 0 and
                 type(entry.get('post_cleanup_allocated_bytes')) is int and 0 <= entry['post_cleanup_allocated_bytes'] <=
                 entry['baseline_allocated_bytes'] + 64*2**20, 'model cleanup')

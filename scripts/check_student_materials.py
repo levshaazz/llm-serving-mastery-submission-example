@@ -27,16 +27,23 @@ def main() -> None:
             # on every file beginning with 03-, or silently skip the new contract.
             # Portable mirror gate: never depend on private course JS modules.
             roles = [c.get("metadata", {}).get("pilot_role") for c in data["cells"]]
-            for role in ("student-scale", "student-groups", "real-calibration", "real-held-out", "gpu-optin"):
+            for role in ("student-scale", "student-groups", "methods-explanation", "real-load",
+                         "real-calibration", "real-selection", "real-clipping", "real-nf4", "real-freeze",
+                         "real-distributions", "real-held-out", "layer-explanation", "layer-gpu-bridge",
+                         "quality-rule", "readiness-check", "gpu-optin"):
                 if roles.count(role) != 1:
                     raise ValueError(f"{path.name}: missing/duplicate pilot role {role}")
             if not roles.index("real-calibration") < roles.index("real-held-out") < roles.index("gpu-optin"):
                 raise ValueError("calibration, held-out, GPU order changed")
+            if not roles.index("real-freeze") < roles.index("real-held-out") < roles.index("quality-rule") < roles.index("readiness-check") < roles.index("gpu-optin"):
+                raise ValueError("frozen selection and pre-run readiness order changed")
             for term in ("def derive_scale(", "def quantize_groups(", "raise NotImplementedError",
                          "REAL_SIZES = [None]", "CHOSEN_GROUP = None", "output_error = None",
                          "RUN_GPU = False", "allow_pickle=False", "4.30", "topic03-layer-decision.json",
                          "CLIP_CANDIDATES = (100, 99, 99.5)", "CHOSEN_CLIP = None",
-                         "NF4_RESTORED = nf4_qdq(W_REAL)", "FROZEN_CHOICE = json.dumps"):
+                         "NF4_RESTORED = nf4_qdq(W_REAL)", "FROZEN_CHOICE = json.dumps",
+                         "check_gpu_readiness()", "FROZEN_QUALITY_RULE", "topic03-preflight.json",
+                         "topic03-screening.json", "topic03-weights-center.png"):
                 if term not in all_source:
                     raise ValueError(f"{path.name}: student contract missing {term}")
             import hashlib

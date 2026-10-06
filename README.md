@@ -6,9 +6,12 @@ Download the [complete lab ZIP](https://levshaazz.github.io/llm-serving-mastery/
 in Colab upload `topic03_pilot.py` and `topic03-real-layer.npz` from it. Local copies
 also live in `teaching/` and `public/downloads/`. The older
 `03-quantization-tradeoffs.ipynb` remains historical, not the required current route.
-The audited v4 scientific CPU notebook passed with instructor solutions. Its new
-GPU/storage-ledger rehearsal remains pending; the dated v3 T4 receipt does not
-certify changed code. Learner validation is also pending, independently.
+The current guided-investigation-v6 notebook passed a complete standard-RAM Colab
+T4 rehearsal with explicit private instructor solutions on 6 October: all 27 code
+cells in order, no errors, both profiles complete and zero post-worker GPU use.
+The [dated v6 receipt](https://levshaazz.github.io/llm-serving-mastery/seminars/runs/2026-10-06-topic03-v6-colab/README.md)
+binds this exact student template. Historical captures remain separate.
+Learner validation is still pending, independently of technical execution.
 The lab now compares grouping, calibration-selected clipping and supplied NF4
 on the same weights/inputs before the separate whole-model GPU A/B.
 

@@ -10,7 +10,9 @@ The current guided-investigation-v6 notebook passed a complete standard-RAM Cola
 T4 rehearsal with explicit private instructor solutions on 6 October: all 27 code
 cells in order, no errors, both profiles complete and zero post-worker GPU use.
 The [dated v6 receipt](https://levshaazz.github.io/llm-serving-mastery/seminars/runs/2026-10-06-topic03-v6-colab/README.md)
-binds this exact student template. Historical captures remain separate.
+binds the immutable archived v6 template. This prose-only follow-up preserves all
+25 student code cells, their identifiers and metadata exactly; the whole-file hash
+differs because explanations changed. Historical captures remain separate.
 Learner validation is still pending, independently of technical execution.
 The lab now compares grouping, calibration-selected clipping and supplied NF4
 on the same weights/inputs before the separate whole-model GPU A/B.

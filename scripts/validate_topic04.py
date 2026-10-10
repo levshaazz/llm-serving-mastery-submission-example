@@ -242,6 +242,8 @@ import socket
 import subprocess
 import sys
 import time
+import threading
+from contextlib import contextmanager
 from datetime import datetime,timezone
 from pathlib import Path
 
@@ -249,6 +251,29 @@ PROTOCOL='topic-04-api-smoke-v3'
 SERVED_NAME='topic04'
 PROMPT='Reply with one short sentence explaining what an API server does.'
 RAW_PROMPT='Say hello briefly.'
+
+
+@contextmanager
+def request_deadline(seconds=120):
+    """POSIX/main-thread absolute wall deadline, distinct from HTTP read inactivity.
+
+    Refuse an existing real-time alarm rather than overwrite another owner's timer.
+    Always restore the previous handler. The course runtime is Linux/WSL/Colab.
+    """
+    if threading.current_thread() is not threading.main_thread() or not hasattr(signal, 'setitimer'):
+        raise RuntimeError('Absolute request deadline requires POSIX main thread')
+    if signal.getitimer(signal.ITIMER_REAL)[0]:
+        raise RuntimeError('An existing alarm owns this process; use an isolated runtime')
+    previous = signal.getsignal(signal.SIGALRM)
+    def expire(signum, frame):
+        raise TimeoutError('Absolute request deadline exceeded')
+    signal.signal(signal.SIGALRM, expire)
+    signal.setitimer(signal.ITIMER_REAL, seconds)
+    try:
+        yield
+    finally:
+        signal.setitimer(signal.ITIMER_REAL, 0)
+        signal.signal(signal.SIGALRM, previous)
 
 
 def normalize_input_ids(encoded):
@@ -282,7 +307,7 @@ def stop_owned_process_group(server,term_seconds=20,kill_seconds=10):
     raise RuntimeError('Owned process group remains after teardown')
 
 
-def run_lab(snapshot,output_path):
+def run_lab(snapshot,output_path,task_probe=None):
     import httpx,openai,torch,vllm,transformers
     from transformers import AutoTokenizer
     if vllm.__version__!='0.29.0': raise RuntimeError('Pinned vLLM 0.29.0 required')
@@ -314,7 +339,9 @@ def run_lab(snapshot,output_path):
               limitations=['single sequential API smoke, not throughput benchmark','first call may include lazy runtime initialization',
                            'TCP/HTTP chunk boundaries are not generated token boundaries','client disconnect reclamation not measured'])
     checkpoint(output_path,data)
-    log=output_path.with_name('server.local.log').open('x',encoding='utf-8')
+    # Calibration and held-out are sequential owned lifetimes in ONE attempt.
+    # Keep separate immutable logs instead of colliding at server.local.log.
+    log=output_path.with_suffix('.server.local.log').open('x',encoding='utf-8')
     server=None; stopped=False; client=None
     def stop_server():
         nonlocal stopped
@@ -344,14 +371,18 @@ def run_lab(snapshot,output_path):
         client=openai.OpenAI(base_url=base,api_key='EMPTY',timeout=120,max_retries=0,
                             http_client=httpx.Client(trust_env=False))
         request=dict(model=SERVED_NAME,messages=[dict(role='user',content=PROMPT)],max_tokens=48,temperature=0)
-        start=time.perf_counter(); answer=client.chat.completions.create(**request)
+        start=time.perf_counter()
+        with request_deadline(): answer=client.chat.completions.create(**request)
         data['nonstream']=dict(request=request,wall_s=time.perf_counter()-start,finish_reason=answer.choices[0].finish_reason,
                                usage=answer.usage.model_dump() if answer.usage else None,content=answer.choices[0].message.content)
         if not data['nonstream']['content']: raise RuntimeError('Empty nonstream response')
         checkpoint(output_path,data); resource_gate()
         start=time.perf_counter(); first=None; pieces=[]; finish=None; chunks=0
-        stream=client.chat.completions.create(**request,stream=True)
+        # Cover creation AND iteration: progressing reads must not reset wall time.
+        sdk_deadline=request_deadline(); sdk_deadline.__enter__()
+        stream=None
         try:
+            stream=client.chat.completions.create(**request,stream=True)
             for chunk in stream:
                 chunks+=1
                 if chunks>512: raise RuntimeError('SDK chunk budget exceeded')
@@ -360,7 +391,10 @@ def run_lab(snapshot,output_path):
                     if first is None: first=time.perf_counter()-start
                     pieces.append(delta)
                 if chunk.choices and chunk.choices[0].finish_reason: finish=chunk.choices[0].finish_reason
-        finally: stream.close()
+        finally:
+            try:
+                if stream is not None: stream.close()
+            finally: sdk_deadline.__exit__(None,None,None)
         data['sdk_stream']=dict(first_content_s=first,wall_s=time.perf_counter()-start,finish_reason=finish,
                                 content=''.join(pieces),sdk_chunks=chunks)
         if first is None or finish is None: raise RuntimeError('Incomplete SDK stream')
@@ -368,7 +402,7 @@ def run_lab(snapshot,output_path):
         payload=dict(model=SERVED_NAME,messages=[dict(role='user',content=RAW_PROMPT)],max_tokens=16,temperature=0,
                      stream=True,stream_options=dict(include_usage=True))
         parser=ChatStream(); raw_chunks=[]; start=time.perf_counter()
-        with httpx.stream('POST',base+'/chat/completions',json=payload,timeout=120,trust_env=False) as response:
+        with request_deadline(), httpx.stream('POST',base+'/chat/completions',json=payload,timeout=120,trust_env=False) as response:
             response.raise_for_status()
             media=response.headers.get('content-type','').split(';')[0].lower()
             if media!='text/event-stream': raise RuntimeError('Wrong SSE content type')
@@ -381,15 +415,20 @@ def run_lab(snapshot,output_path):
         data['raw_sse']=record; checkpoint(output_path,data)
         if record['status']!='complete' or not record['content']: raise RuntimeError('Incomplete raw SSE')
         negative={}
-        try: client.chat.completions.create(model='not-the-served-model',messages=[dict(role='user',content='hi')],max_tokens=1)
+        try:
+            with request_deadline(): client.chat.completions.create(model='not-the-served-model',messages=[dict(role='user',content='hi')],max_tokens=1)
         except openai.APIStatusError as exc: negative['wrong_model']=dict(status=exc.status_code)
         long_text=' blue'*2300
         rendered=normalize_input_ids(tokenizer.apply_chat_template([dict(role='user',content=long_text)],tokenize=True,add_generation_prompt=True))
         if not 2048<len(rendered)<8192: raise RuntimeError('Bounded over-context fixture invalid')
-        try: client.chat.completions.create(model=SERVED_NAME,messages=[dict(role='user',content=long_text)],max_tokens=16)
+        try:
+            with request_deadline(): client.chat.completions.create(model=SERVED_NAME,messages=[dict(role='user',content=long_text)],max_tokens=16)
         except openai.APIStatusError as exc: negative['over_context']=dict(status=exc.status_code,rendered_prompt_tokens=len(rendered))
-        if set(negative)!={'wrong_model','over_context'} or any(not 400<=r['status']<500 for r in negative.values()):
-            raise RuntimeError('Expected 4xx contract not met')
+        if set(negative)!={'wrong_model','over_context'} or negative['wrong_model']['status']!=404 or negative['over_context']['status']!=400:
+            raise RuntimeError('Expected wrong-model 404 / over-context 400 contract not met')
+        if task_probe is not None:
+            with request_deadline(): data['task_probe']=task_probe(client,tokenizer)
+        data['timeout_policy']=dict(http_phase_s=120,absolute_request_s=120,mechanism='POSIX ITIMER_REAL main thread')
         data['negative']=negative; data['status']='complete'; checkpoint(output_path,data)
     except BaseException as exc:
         data['status']='failed'; data['error_type']=type(exc).__name__; raise
@@ -464,7 +503,9 @@ def validate_artifact(data):
                 type(r.get('device_used_mib')) is int and 0<=r['device_used_mib']<=12288 for r in resources),'resource envelope')
     require(resources[-1]['device_used_mib']<=resources[0]['device_used_mib']+64,'device allocation recovered after teardown')
     require(set(data['negative'])=={'wrong_model','over_context'},'negative probes')
-    require(all(type(row['status']) is int and 400<=row['status']<500 for row in data['negative'].values()),'negative 4xx')
+    require(all(type(row['status']) is int for row in data['negative'].values()) and
+            data['negative']['wrong_model']['status']==404 and data['negative']['over_context']['status']==400,
+            'wrong-model must be 404; over-context must be 400, not arbitrary 4xx')
     require(type(data['negative']['over_context']['rendered_prompt_tokens']) is int and
             2048<data['negative']['over_context']['rendered_prompt_tokens']<8192,'bounded token rejection')
     return True

@@ -1,5 +1,6 @@
 """Portable CPU/offline first cells and artifact validators; never invokes a GPU helper."""
 import contextlib
+import ast
 import copy
 import importlib.util
 import io
@@ -57,10 +58,34 @@ class Topic0304NotebookTests(unittest.TestCase):
         with patch.object(socket,'socket',side_effect=AssertionError('CPU replay cannot connect')), \
              patch.object(socket,'create_connection',side_effect=AssertionError('CPU replay cannot connect')), \
              contextlib.redirect_stdout(io.StringIO()):
-            for source in code[:3]: exec(source,namespace)
+            if topic == '04':
+                # Select by semantic role, not obsolete cell indices. These
+                # portable CI checks validate PROVIDED infrastructure and the
+                # embedded historical bytes; they do not fill student TODOs or
+                # claim independent completion of the teaching assignment.
+                data=json.loads((NOTEBOOK_ROOT/'seminars/04-vllm-openai-serving.ipynb').read_text())
+                roles={c.get('metadata',{}).get('investigation_role'):c for c in data['cells']}
+                exec(''.join(roles['provided-cpu']['source']),namespace)
+                namespace['FIXTURE']=namespace['parser_namespace']['synthetic_fixture']()
+                nodes=ast.parse(''.join(roles['real-replay']['source'])).body
+                assignment=next(n for n in nodes if isinstance(n,ast.Assign)
+                    and any(isinstance(t,ast.Name) and t.id=='RECORDED_SERVICE' for t in n.targets))
+                namespace['json']=json
+                exec(compile(ast.Module(body=[assignment],type_ignores=[]),'recorded-assignment','exec'),namespace)
+                parser=namespace['parser_namespace']['ChatStream']()
+                for chunk in namespace['RECORDED_SERVICE']['raw_sse']['chunks']:
+                    parser.feed(bytes.fromhex(chunk['hex']),chunk['at_s'])
+                namespace['REPLAY']=parser.finish()
+                for role in ('student-admission','student-completion'):
+                    self.assertIn('raise NotImplementedError',''.join(roles[role]['source']))
+                optin=''.join(roles['gpu-optin']['source'])
+                self.assertIn('RUN_GPU=False',optin)
+                self.assertTrue(any('if not matches' in c and 'pip' in c for c in code))
+            else:
+                for source in code[:3]: exec(source,namespace)
         self.assertFalse(any(n=='torch' or n.startswith('torch.') for n in set(sys.modules)-before))
         self.assertNotIn('lab_namespace',namespace)
-        self.assertIn('pip',code[3])
+        if topic != '04': self.assertIn('pip',code[3])
         return namespace
 
     def test_topic03_offline_and_real_artifact(self):

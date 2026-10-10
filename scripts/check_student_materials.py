@@ -71,6 +71,18 @@ def main() -> None:
             term in all_source for term in ("topic-04-api-smoke-v3", "VLLM_USE_V2_MODEL_RUNNER", "VLLM_USE_FLASHINFER_SAMPLER", "env=env", "normalize_input_ids", "2048<len(rendered)<8192", "ChatStream", "stop_owned_process_group", "max_retries=0", "validate_artifact", "RECORDED_SERVICE", "parser_namespace")
         ):
             raise ValueError(f"{path.name}: canonical v3 WSL/context/byte-replay/owned-teardown contract missing")
+        if path.name.startswith("04-"):
+            roles = [c.get("metadata", {}).get("investigation_role") for c in data["cells"]]
+            for role in ("student-admission", "student-completion", "real-replay", "plots-and-change", "cpu-plan", "gpu-optin", "fresh-service", "freeze-selection", "held-out"):
+                if roles.count(role) != 1:
+                    raise ValueError(f"{path.name}: missing/duplicate student action {role}")
+            if not roles.index("cpu-plan") < roles.index("gpu-optin") < roles.index("fresh-service") < roles.index("freeze-selection") < roles.index("held-out"):
+                raise ValueError("Topic04 calibration/freeze/held-out order changed")
+            for term in ("def admit_request(", "def score_predictions(", "RUN_GPU=False",
+                         "sampling_distribution", "live_task_probe", "SCORING_CHECKS==6",
+                         "raise NotImplementedError", "topic-04-client.json", "role_or_empty"):
+                if term not in all_source:
+                    raise ValueError(f"{path.name}: student investigation missing {term}")
         code_cells = 0
         cell_ids = set()
         for index, cell in enumerate(data["cells"], 1):

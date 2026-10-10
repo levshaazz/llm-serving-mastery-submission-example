@@ -1,5 +1,27 @@
 # LLM Serving Mastery — stable submission example
 
+## Topic 04 — current classifier investigation v3
+
+Open [the current notebook in Colab](https://colab.research.google.com/github/levshaazz/llm-serving-mastery-submission-example/blob/main/seminars/04-vllm-openai-serving.ipynb),
+or download the [matching readable-helper ZIP](https://levshaazz.github.io/llm-serving-mastery/seminars/04-client-investigation.zip).
+The required route is A–F: implement the rendered-context budget and scoring over
+all attempts, inspect real Qwen classification errors, declare one prompt OR format
+challenger, measure both policies on calibration, freeze your justified choice,
+and only then evaluate that choice on held-out. Do not run through D3 automatically.
+Streaming parsing, plotting and owned-server cleanup are provided infrastructure.
+The [50-slide core](https://levshaazz.github.io/llm-serving-mastery/Lectures/04-vllm-serving-core.html)
+is the main route; the 96-slide deck is optional reference. Read [Book 04](https://levshaazz.github.io/llm-serving-mastery/en/book/04/).
+
+The unchanged v3 notebook code passed separate private instructor reference runs
+on Tesla T4 / Colab High RAM on 8 October 2026, for prompt and format challengers
+on calibration. Each selected baseline before held-out and verified both teardowns.
+This is not a fresh student run, useful classifier-quality guarantee or latency A/B.
+Format itself was not tested on held-out. GPU defaults false; standard-RAM Colab
+and independent learner completion remain unverified. Keep the 24 GiB available-RAM
+safety gate rather than weakening it. The notebook contains no teacher solutions or outputs.
+
+## Topic 03 — quantization investigation
+
 Topic 03 starts with your own grouped quantizer and real Qwen weights/activations,
 then a calibration-only choice, held-out check and a separate FP16/NF4 GPU A/B.
 Download the [complete lab ZIP](https://levshaazz.github.io/llm-serving-mastery/downloads/topic03-pilot.zip);
@@ -102,11 +124,12 @@ private repository's Issue with **@levshaazz**. Never put raw logs or credential
 | 01 · single-request baseline | [serving baseline](seminars/01-serving-system-baseline.ipynb) | [Open](https://colab.research.google.com/github/levshaazz/llm-serving-mastery-submission-example/blob/main/seminars/01-serving-system-baseline.ipynb) |
 | 02 · GPU bottlenecks | [profiler lab](seminars/02-gpu-profiling-and-bottlenecks.ipynb) | [Open](https://colab.research.google.com/github/levshaazz/llm-serving-mastery-submission-example/blob/main/seminars/02-gpu-profiling-and-bottlenecks.ipynb) |
 | 03 · quantization | [One matrix, four bits: required investigation](seminars/03-quantization-pilot.ipynb) | [Open](https://colab.research.google.com/github/levshaazz/llm-serving-mastery-submission-example/blob/main/seminars/03-quantization-pilot.ipynb) |
-| 04 · vLLM API | [local server and SDK lab](seminars/04-vllm-openai-serving.ipynb) | [Open](https://colab.research.google.com/github/levshaazz/llm-serving-mastery-submission-example/blob/main/seminars/04-vllm-openai-serving.ipynb) |
+| 04 · ML service | [Serve a classifier: required v3 investigation](seminars/04-vllm-openai-serving.ipynb) | [Open](https://colab.research.google.com/github/levshaazz/llm-serving-mastery-submission-example/blob/main/seminars/04-vllm-openai-serving.ipynb) |
 
-Topics 03–04 deliberately use small, bounded smoke experiments. All Topics 01–04 notebooks have
-passed sequential offline instructor GPU rehearsals on an RTX 5070 Ti. The notebooks have no executed
-cell outputs; Topics 02–04 embed explicitly labeled recorded instructor evidence for CPU/offline
+Topics 03–04 deliberately use bounded experiments. The older Topics 01–04 implementations
+passed sequential offline instructor GPU rehearsals on an RTX 5070 Ti; those runs do not certify
+the current investigations. See the separate current Topic 03 and Topic 04 T4 evidence above.
+The notebooks have no executed cell outputs; Topics 02–04 embed explicitly labeled recorded instructor evidence for CPU/offline
 replay. These recordings are not evidence that you performed the required GPU lab. Evidence limits are on the
 [course provenance page](https://levshaazz.github.io/llm-serving-mastery/en/provenance/).
 Set `LSM_MODEL_CACHE` to persistent storage if the runtime is ephemeral. Topics 03–04 default to
@@ -116,9 +139,11 @@ packages are reused without reinstalling on every notebook execution. Later runs
 locally rather than downloading for every fresh server process. Keep caches and local logs
 out of Git; inspect evidence before publishing it.
 
-Topics 03–04 now start with three executable CPU/offline cells: a complete INT4 arithmetic example
-or fragmented UTF-8/SSE parser, then recorded real model/API evidence. Their bounded v3 GPU workloads
-are unchanged, with incremental checkpoints and owned-server teardown. The canonical helpers require
+Topic 03 starts with grouped quantization and real layer error. Topic 04 starts with
+context admission, sampling, all-attempt task scores and real classifier errors; it
+then compares calibration policies and freezes the selection before held-out. Earlier
+standalone INT4/SSE demonstrations remain historical, not the current required route.
+Both investigations use incremental checkpoints and owned-worker teardown. The canonical helpers require
 Linux/WSL, an idle CUDA GPU and at least 24 GiB available host RAM. Do not lower resource gates to force
 a run. After your own successful run:
 

@@ -1,6 +1,39 @@
 """Provided ML task machinery. No network/GPU work at import, no student answer."""
 import math
+from pathlib import Path
+from typing import Any, Callable, Sequence, TypedDict
+from teaching.topic04_types import PredictionRow,PredictionScores,ClientLike,TokenizerLike
 from teaching.topic04_sse import ChatStream
+
+
+class TaskCase(TypedDict):
+    id: str
+    label: str
+    text: str
+
+
+class TaskPolicy(TypedDict):
+    name: str
+    output_cap: int
+    structured: bool
+    system: str
+
+
+class TaskObservation(PredictionRow, total=False):
+    usage: dict[str, int] | None
+    error_type: str
+    request: dict[str, Any]
+    rendered_input_ids: list[int]
+
+
+class TaskProbe(TypedDict):
+    contract: str
+    status: str
+    temperature: float
+    output_cap: int
+    structured: bool
+    system: str
+    observations: list[TaskObservation]
 
 LABELS = ('billing', 'access', 'bug')
 SYSTEM = ('Classify the support ticket. Reply with exactly one lowercase label: billing, access, or bug. '
@@ -8,8 +41,29 @@ SYSTEM = ('Classify the support ticket. Reply with exactly one lowercase label: 
           'bug = software malfunction after successful login. No explanation.')
 
 
-def sampling_distribution(logits=(2., 1., 0.), temperature=1., top_p=1.):
-    """Toy next-token distribution; NOT measured Qwen logits/class probabilities."""
+def sampling_distribution(logits: Sequence[float] = (2., 1., 0.), temperature: float = 1., top_p: float = 1.) -> list[float]:
+    """Transform invented logits into a temperature/nucleus distribution.
+
+    Parameters
+    ----------
+    logits : sequence of float
+        Nonempty finite next-token logits, shape [vocabulary].
+    temperature : float
+        Nonnegative divisor; zero chooses the first maximum deterministically.
+    top_p : float
+        Cumulative mass threshold in (0,1], applied after temperature.
+
+    Returns
+    -------
+    list[float]
+        Renormalized probabilities in original vocabulary order; sum one.
+        These are not measured Qwen logits or class correctness probabilities.
+
+    Raises
+    ------
+    ValueError
+        If inputs violate their finite-value/range contracts.
+    """
     if not math.isfinite(temperature) or temperature < 0 or not 0 < top_p <= 1 or not logits or not all(math.isfinite(v) for v in logits):
         raise ValueError('Finite logits, nonnegative temperature and 0 < top_p <= 1 required')
     if temperature == 0:
@@ -25,8 +79,20 @@ def sampling_distribution(logits=(2., 1., 0.), temperature=1., top_p=1.):
     return [probs[i]/mass if i in kept else 0. for i in range(len(probs))]
 
 
-def replay_response(records):
-    """Use the tested strict wire parser rather than ask ML students to write it."""
+def replay_response(records: Sequence[dict[str, Any] | str]) -> dict[str, Any]:
+    """Reduce a finite teaching transcript with the supplied strict parser.
+
+    Parameters
+    ----------
+    records : sequence of dict or str
+        JSON envelopes or literal [DONE], in wire order.
+
+    Returns
+    -------
+    dict
+        content, finish_reason, done and status; partial text stays partial.
+        All replay clocks are zero, so this makes no timing claim.
+    """
     import json
     parser = ChatStream()
     for record in records:
@@ -36,7 +102,27 @@ def replay_response(records):
     return {k: state[k] for k in ('content', 'finish_reason', 'done', 'status')}
 
 
-def prediction_row(case_id, expected, content, status='complete', finish_reason='stop'):
+def prediction_row(case_id: str, expected: str, content: str, status: str = 'complete', finish_reason: str | None = 'stop') -> TaskObservation:
+    """Normalize one attempted ticket without extracting labels from prose.
+
+    Parameters
+    ----------
+    case_id : str
+        Stable ticket identifier.
+    expected : str
+        Gold label: billing, access or bug.
+    content : str
+        Literal observed response, possibly empty for failure.
+    status : str
+        complete, partial or failed lifecycle status.
+    finish_reason : str or None
+        Observed terminal reason, not an indication of correctness.
+
+    Returns
+    -------
+    TaskObservation
+        Gold/text/status and predicted label; None for invalid/incomplete text.
+    """
     if expected not in LABELS or status not in ('complete', 'partial', 'failed') or not isinstance(content, str):
         raise ValueError('Invalid task observation')
     # Exact lowercase label after outer whitespace only; no substring extraction.
@@ -46,8 +132,14 @@ def prediction_row(case_id, expected, content, status='complete', finish_reason=
                 finish_reason=finish_reason, predicted=predicted)
 
 
-def evaluation_fixture():
-    """Eight invented attempts, covering wrong label, invalid format and failures."""
+def evaluation_fixture() -> list[TaskObservation]:
+    """Create eight illustrative attempts, not a measured accuracy benchmark.
+
+    Returns
+    -------
+    list[TaskObservation]
+        Eight rows covering wrong labels, invalid format and lifecycle failure.
+    """
     return [prediction_row('e1','billing','billing'), prediction_row('e2','billing','access'),
             prediction_row('e3','access','access'), prediction_row('e4','bug','bug',finish_reason='length'),
             prediction_row('e5','bug','billing because payment failed'),
@@ -55,7 +147,19 @@ def evaluation_fixture():
             prediction_row('e7','billing','',status='failed'), prediction_row('e8','bug','bug')]
 
 
-def check_scores(score):
+def check_scores(score: Callable[[Sequence[PredictionRow]], PredictionScores]) -> int:
+    """Check student scoring against empty, invalid and incomplete fixtures.
+
+    Parameters
+    ----------
+    score : callable
+        Maps attempted rows to all-attempt counts/rates and a [3,4] matrix.
+
+    Returns
+    -------
+    int
+        Number of passing fixtures; failures raise AssertionError.
+    """
     fixtures = [([], (0,0,0,0)), (evaluation_fixture(), (8,4,5,6)),
                 ([prediction_row('x','bug','access')], (1,0,1,1)),
                 ([prediction_row('x','access','access',status='partial')], (1,0,0,0)),
@@ -80,11 +184,42 @@ def check_scores(score):
     return len(fixtures)
 
 
-def live_task_probe(client, tokenizer, cases, output_cap=8, structured=False, save_partial=None, system=SYSTEM):
+def live_task_probe(client: ClientLike, tokenizer: TokenizerLike, cases: Sequence[TaskCase], output_cap: int = 8,
+                    structured: bool = False, save_partial: Callable[[TaskProbe], None] | None = None,
+                    system: str = SYSTEM) -> TaskProbe:
     """One frozen setting, sequential task probe inside the owned service lifetime.
 
     The caller's absolute 120s bound covers the WHOLE auxiliary probe. Never retry.
     Failures remain rows; accuracy denominators must include every attempted ticket.
+
+    Parameters
+    ----------
+    client : ClientLike
+        Already connected local OpenAI-compatible client; retries disabled.
+    tokenizer : TokenizerLike
+        Pinned tokenizer used to count the complete rendered chat.
+    cases : sequence of TaskCase
+        Ordered unique tickets with id, text and gold label.
+    output_cap : int
+        Maximum selected output IDs, integer 1..16.
+    structured : bool
+        Restrict output to the three label strings when True.
+    save_partial : callable or None
+        Optional checkpoint callback after every attempted ticket.
+    system : str
+        Frozen nonempty system instruction, not student text.
+
+    Returns
+    -------
+    TaskProbe
+        Settings and all attempted observations, including failures and IDs.
+
+    Raises
+    ------
+    TimeoutError
+        The caller's whole-probe wall deadline expires; checkpoint then rethrow.
+    ValueError
+        Invalid settings, duplicate IDs or rendered context overflow.
     """
     if type(output_cap) is not int or not 1 <= output_cap <= 16 or type(structured) is not bool:
         raise ValueError('Task cap must be 1..16; structured must be bool')
@@ -93,7 +228,19 @@ def live_task_probe(client, tokenizer, cases, output_cap=8, structured=False, sa
     observations = []
     if len({c['id'] for c in cases}) != len(cases) or any(c['label'] not in LABELS for c in cases):
         raise ValueError('Unique case IDs and known gold labels required')
-    def record(status):
+    def record(status: str) -> TaskProbe:
+        """Snapshot the accumulated probe without changing its population.
+
+        Parameters
+        ----------
+        status : str
+            running, complete or deadline-exceeded progress state.
+
+        Returns
+        -------
+        TaskProbe
+            Frozen settings and observations accumulated so far.
+        """
         return dict(contract='topic04-task-probe-v1',status=status,temperature=0,
                     output_cap=output_cap,structured=structured,system=system,observations=observations)
     for case in cases:
@@ -127,8 +274,21 @@ def live_task_probe(client, tokenizer, cases, output_cap=8, structured=False, sa
     return record('complete')
 
 
-def comparison_policies(challenger='prompt', output_cap=8):
-    """A versus B changes ONE factor; declarations precede measurements."""
+def comparison_policies(challenger: str = 'prompt', output_cap: int = 8) -> list[TaskPolicy]:
+    """Declare a matched baseline and one-factor challenger before measuring.
+
+    Parameters
+    ----------
+    challenger : str
+        prompt changes the system instruction; format changes the output constraint.
+    output_cap : int
+        Shared integer cap 1..16 selected IDs.
+
+    Returns
+    -------
+    list[TaskPolicy]
+        Two policies in baseline/challenger order, otherwise identical.
+    """
     if challenger not in ('prompt', 'format') or type(output_cap) is not int or not 1 <= output_cap <= 16:
         raise ValueError('Choose prompt or format, with integer cap 1..16')
     clarified = SYSTEM + (' Decide by the problem that needs fixing. If login succeeds but a feature '
@@ -139,8 +299,22 @@ def comparison_policies(challenger='prompt', output_cap=8):
                  system=clarified if challenger=='prompt' else SYSTEM)]
 
 
-def baseline_and_recall(rows, score):
-    """Provided statistics, not a third implementation task."""
+def baseline_and_recall(rows: Sequence[PredictionRow], score: Callable[[Sequence[PredictionRow]], PredictionScores]) -> dict[str, Any]:
+    """Compute supplied all-attempt statistics and a constant-class control.
+
+    Parameters
+    ----------
+    rows : sequence of PredictionRow
+        All attempted tickets, not a filtered list of successful answers.
+    score : callable
+        Student scorer returning counts, rates and a [3,4] confusion matrix.
+
+    Returns
+    -------
+    dict
+        Constant-access correct count/accuracy, per-class recall and scores.
+        Empty populations have None rates; absent true classes have None recall.
+    """
     n = len(rows)
     return dict(constant_access_correct=sum(r['expected']=='access' for r in rows),
                 constant_access_accuracy=sum(r['expected']=='access' for r in rows)/n if n else None,
@@ -150,8 +324,35 @@ def baseline_and_recall(rows, score):
                 scores=score(rows))
 
 
-def freeze_selection(comparison, policies, chosen, explanation, path):
-    """Save a student choice from measured calibration BEFORE opening test data."""
+def freeze_selection(comparison: dict[str, Any], policies: Sequence[TaskPolicy], chosen: str,
+                     explanation: str, path: str | Path) -> dict[str, Any]:
+    """Save a calibration decision before access to held-out teaching cases.
+
+    Parameters
+    ----------
+    comparison : dict
+        Completed calibration comparison, including policies and raw probes.
+    policies : sequence of TaskPolicy
+        The two declared matched policies, in observation order.
+    chosen : str
+        Name of one observed policy.
+    explanation : str
+        Nonempty calibration-based justification; no held-out tuning.
+    path : str or Path
+        New decision file; existing evidence is never overwritten.
+
+    Returns
+    -------
+    dict
+        Payload with selected policy/comparison/explanation and its SHA-256.
+
+    Raises
+    ------
+    ValueError
+        Incomplete comparison or changed settings/population.
+    FileExistsError
+        The decision path already exists; preserve the old attempt.
+    """
     import hashlib, json
     from pathlib import Path
     if comparison.get('split') != 'calibration' or comparison.get('status') != 'complete':
@@ -191,7 +392,19 @@ def freeze_selection(comparison, policies, chosen, explanation, path):
     return record
 
 
-def read_frozen(path):
+def read_frozen(path: str | Path) -> dict[str, Any]:
+    """Load and verify a previously frozen decision.
+
+    Parameters
+    ----------
+    path : str or Path
+        Existing calibration decision JSON file.
+
+    Returns
+    -------
+    dict
+        Verified payload/digest; changed payloads raise ValueError.
+    """
     import hashlib, json
     from pathlib import Path
     record=json.loads(Path(path).read_text())
@@ -201,8 +414,20 @@ def read_frozen(path):
     return record
 
 
-def heldout_cases(frozen):
-    """Default access after freeze; PUBLIC teaching data, not cryptographic secrecy."""
+def heldout_cases(frozen: dict[str, Any]) -> list[TaskCase]:
+    """Expose public teaching cases only after verifying a frozen decision.
+
+    Parameters
+    ----------
+    frozen : dict
+        Calibration payload and matching digest from read_frozen.
+
+    Returns
+    -------
+    list[TaskCase]
+        Six tickets, two per true class. This is procedural ordering, not
+        cryptographic secrecy or a hidden grading population.
+    """
     import hashlib, json
     digest=hashlib.sha256(json.dumps(frozen['payload'],sort_keys=True,ensure_ascii=False).encode()).hexdigest()
     if frozen['sha256']!=digest or frozen['payload']['contract']!='topic04-frozen-choice-v1':

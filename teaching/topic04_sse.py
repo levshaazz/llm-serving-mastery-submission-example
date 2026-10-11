@@ -6,6 +6,31 @@ Chat completion is a separate, deliberately strict course contract, not all SSE.
 import codecs
 import json
 import math
+from typing import Any, TypedDict
+
+
+class SSEEvent(TypedDict):
+    """One framed event; data remains uninterpreted text."""
+    event: str
+    data: str
+
+
+class ChatResult(TypedDict):
+    """Finite lifecycle observation; all times are client-arrival seconds."""
+    status: str
+    content: str
+    finish_reason: str | None
+    done: bool
+    usage: dict[str, int] | None
+    first_event_s: float | None
+    first_content_s: float | None
+    wall_s: float
+    byte_count: int
+    event_count: int
+    events: list[dict[str, Any]]
+    error: str | None
+    unfinished_frame: bool
+    clock: str
 
 
 class SSEProtocolError(ValueError):
@@ -13,13 +38,34 @@ class SSEProtocolError(ValueError):
 
 
 class SSEDecoder:
-    def __init__(self, max_bytes=262144, max_events=4096):
+    def __init__(self, max_bytes: int = 262144, max_events: int = 4096) -> None:
+        """Initialize a bounded, incremental UTF-8 decoder.
+
+        Parameters
+        ----------
+        max_bytes : int
+            Cumulative byte budget, not the size of one transport chunk.
+        max_events : int
+            Maximum number of dispatched events.
+
+        Returns
+        -------
+        None
+            Initializes framing state; performs no network operation.
+        """
         self.decoder = codecs.getincrementaldecoder('utf-8-sig')('strict')
         self.line = ''; self.data = []; self.event = ''; self.after_cr = False
         self.bytes = 0; self.count = 0; self.max_bytes = max_bytes; self.max_events = max_events
         self.closed = False
 
-    def _line(self):
+    def _line(self) -> SSEEvent | None:
+        """Consume one buffered line according to SSE framing.
+
+        Returns
+        -------
+        SSEEvent or None
+            A dispatched event on a blank line, otherwise no event.
+        """
         line, self.line = self.line, ''
         if not line:
             if not self.data:
@@ -36,7 +82,26 @@ class SSEDecoder:
         # id/retry/unknown fields do not alter this finite HTTP replay client.
         return None
 
-    def feed(self, raw):
+    def feed(self, raw: bytes) -> list[SSEEvent]:
+        """Decode a transport chunk, preserving split UTF-8 and CRLF state.
+
+        Parameters
+        ----------
+        raw : bytes
+            Next contiguous wire bytes; may contain zero or several events.
+
+        Returns
+        -------
+        list[SSEEvent]
+            Fully framed events, in arrival order; empty for partial frames.
+
+        Raises
+        ------
+        SSEProtocolError
+            If already closed or a cumulative limit is exceeded.
+        UnicodeError
+            If the wire contains malformed UTF-8.
+        """
         if self.closed: raise SSEProtocolError('decoder already closed')
         if not isinstance(raw,bytes): raise TypeError('feed requires bytes, not decoded strings')
         self.bytes += len(raw)
@@ -54,7 +119,19 @@ class SSEDecoder:
             else: self.line += char
         return events
 
-    def finish(self):
+    def finish(self) -> bool:
+        """Close the decoder without dispatching an unfinished EOF event.
+
+        Returns
+        -------
+        bool
+            Whether a buffered line or data field remains unfinished.
+
+        Raises
+        ------
+        UnicodeError
+            If EOF cuts an unfinished UTF-8 code point.
+        """
         self.decoder.decode(b'',final=True)  # Incomplete UTF-8 is a protocol error.
         self.closed = True
         # WHATWG does not dispatch an unfinished event at EOF.
@@ -63,13 +140,34 @@ class SSEDecoder:
 
 class ChatStream:
     """No reconnect/retry: partial text is evidence, never a completed answer."""
-    def __init__(self):
+    def __init__(self) -> None:
+        """Initialize a finite single-choice text-completion lifecycle.
+
+        Returns
+        -------
+        None
+            Empty content, clocks and event history; no network activity.
+        """
         self.decoder = SSEDecoder(); self.events = []; self.content = ''
         self.finish_reason = None; self.usage = None; self.done = False
         self.first_event_s = None; self.first_content_s = None; self.last_s = 0.
         self.error = None; self.closed = False; self.cancelled = False; self.unfinished_frame = False
 
-    def _event(self,event,at_s):
+    def _event(self, event: SSEEvent, at_s: float) -> None:
+        """Validate and reduce one already framed chat event.
+
+        Parameters
+        ----------
+        event : SSEEvent
+            Message event containing JSON or the literal [DONE].
+        at_s : float
+            Chunk-arrival wall seconds since request start.
+
+        Returns
+        -------
+        None
+            Updates content, usage and lifecycle; rejects out-of-order data.
+        """
         if self.done: raise SSEProtocolError('data after DONE')
         if event['event'] != 'message': raise SSEProtocolError('only message events supported')
         if self.first_event_s is None: self.first_event_s = at_s
@@ -115,7 +213,21 @@ class ChatStream:
             self.finish_reason=finish
         row['kind']='finish' if finish is not None else ('content' if text else 'role_or_empty')
 
-    def feed(self,raw,at_s):
+    def feed(self, raw: bytes, at_s: float) -> None:
+        """Feed wire bytes with a finite monotonic client arrival clock.
+
+        Parameters
+        ----------
+        raw : bytes
+            Contiguous transport bytes, not decoded token strings.
+        at_s : float
+            Seconds since request start, not GPU or token-emission time.
+
+        Returns
+        -------
+        None
+            Updates state and preserves errors before raising them.
+        """
         try:
             if self.closed: raise SSEProtocolError('stream already closed')
             if self.error: raise SSEProtocolError('stream already failed')
@@ -127,7 +239,27 @@ class ChatStream:
             self.error=type(exc).__name__ + ': ' + str(exc)
             raise
 
-    def finish(self,cancelled=False,transport_error=None):
+    def finish(self, cancelled: bool = False, transport_error: str | None = None) -> ChatResult:
+        """Close the stream and classify complete, partial or failed evidence.
+
+        Parameters
+        ----------
+        cancelled : bool
+            Whether this client deliberately stopped reading.
+        transport_error : str or None
+            Transport failure explanation, if observed.
+
+        Returns
+        -------
+        ChatResult
+            Content, lifecycle, usage and raw event history. Clocks are seconds;
+            partial text is retained but is never a completed answer.
+
+        Raises
+        ------
+        SSEProtocolError
+            If this lifecycle was already closed.
+        """
         if self.closed: raise SSEProtocolError('stream already closed')
         self.closed=True; self.cancelled=cancelled
         try: self.unfinished_frame=self.decoder.finish()
@@ -144,8 +276,30 @@ class ChatStream:
                     clock='client chunk-arrival wall; not token emission or GPU time')
 
 
-def synthetic_fixture():
-    def chunk(delta,finish=None):
+def synthetic_fixture() -> dict[str, Any]:
+    """Construct and parse invented byte/clock examples without a server.
+
+    Returns
+    -------
+    dict
+        Request, frames, hex chunks and complete/partial/cancelled results.
+        Usage counts and clocks are invented, not tokenizer measurements.
+    """
+    def chunk(delta: dict[str, str], finish: str | None = None) -> dict[str, Any]:
+        """Build one illustrative OpenAI-style chunk envelope.
+
+        Parameters
+        ----------
+        delta : dict[str, str]
+            Role/content fields; empty for the finish event.
+        finish : str or None
+            Terminal reason, otherwise a nonterminal event.
+
+        Returns
+        -------
+        dict
+            A single-choice envelope; no tokenization is performed.
+        """
         return dict(id='illustrative',object='chat.completion.chunk',model='topic04',
                     choices=[dict(index=0,delta=delta,finish_reason=finish)])
     payload=dict(model='topic04',messages=[dict(role='user',content='Say café ☕ briefly.')],

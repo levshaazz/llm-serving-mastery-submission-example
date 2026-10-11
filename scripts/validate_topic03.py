@@ -8,6 +8,7 @@ import subprocess
 import time
 from datetime import datetime, timezone
 from pathlib import Path
+from typing import Any
 
 MODEL_ID='Qwen/Qwen2.5-0.5B-Instruct'
 REVISION='7ae557604adf67be50417f59c2c2f167def9a775'
@@ -21,13 +22,45 @@ PROMPTS=[
 ]
 
 
-def checkpoint(path,data):
+def checkpoint(path: str | Path, data: dict[str, Any]) -> None:
+    """Atomically replace one attempt's progress checkpoint.
+
+    Parameters
+    ----------
+    path : str or Path
+        File inside the caller's fresh attempt directory.
+    data : dict
+        JSON-compatible progress/results; nonfinite values are rejected.
+
+    Returns
+    -------
+    None
+        Writes UTF-8 JSON via a sibling temporary file; no cache changes.
+    """
     path=Path(path); temporary=path.with_suffix(path.suffix+'.tmp')
     temporary.write_text(json.dumps(data,indent=2,ensure_ascii=False,allow_nan=False)+'\n',encoding='utf-8')
     temporary.replace(path)
 
 
-def resource_gate(require_idle=False):
+def resource_gate(require_idle: bool = False) -> dict[str, float | int]:
+    """Read the unchanged historical operator resource envelope.
+
+    Parameters
+    ----------
+    require_idle : bool
+        Reject an existing GPU compute process before model startup.
+
+    Returns
+    -------
+    dict
+        available_ram_gib and device_used_mib, in GiB and device-wide MiB.
+
+    Raises
+    ------
+    RuntimeError
+        Unsupported host, less than 24 GiB RAM, over 12 GiB device use,
+        or unsafe ownership. This is NOT the current student pilot profile.
+    """
     mem=Path('/proc/meminfo')
     if not mem.exists(): raise RuntimeError('Linux/WSL RAM gate unavailable; use supported CUDA runtime')
     available=int(next(line.split()[1] for line in mem.read_text().splitlines() if line.startswith('MemAvailable:')))*1024
@@ -39,7 +72,15 @@ def resource_gate(require_idle=False):
     return dict(available_ram_gib=available/2**30,device_used_mib=max(used))
 
 
-def resolve_snapshot():
+def resolve_snapshot() -> Path:
+    """Resolve the exact 0.5B snapshot, reusing persistent cache first.
+
+    Returns
+    -------
+    Path
+        Local immutable snapshot directory. In offline mode a missing pinned
+        snapshot raises RuntimeError instead of silently downloading.
+    """
     from huggingface_hub import snapshot_download
     cache=Path(os.environ.get('LSM_MODEL_CACHE',Path.cwd()/'.cache/models')).expanduser()
     try: snapshot=snapshot_download(MODEL_ID,revision=REVISION,cache_dir=str(cache),local_files_only=True)
@@ -49,7 +90,27 @@ def resolve_snapshot():
     return Path(snapshot)
 
 
-def run_lab(snapshot,output_path):
+def run_lab(snapshot: str | Path, output_path: str | Path) -> dict[str, Any]:
+    """Run the archived four-prompt FP16/NF4 operator smoke sequentially.
+
+    Parameters
+    ----------
+    snapshot : str or Path
+        Already resolved pinned model/tokenizer directory; no model download.
+    output_path : str or Path
+        Fresh checkpoint path; existing evidence raises FileExistsError.
+
+    Returns
+    -------
+    dict
+        Runtime identity, raw natural/forced samples, allocator peaks and
+        summaries. Raw clocks are seconds; this is not an HTTP benchmark.
+
+    Raises
+    ------
+    RuntimeError
+        Resource, package, CUDA or cleanup contract fails; partial JSON remains.
+    """
     import torch,transformers,bitsandbytes
     from transformers import AutoModelForCausalLM,AutoTokenizer,BitsAndBytesConfig
     from transformers.generation.streamers import BaseStreamer
@@ -62,14 +123,59 @@ def run_lab(snapshot,output_path):
     if not torch.cuda.is_available(): raise RuntimeError('CUDA required; recorded replay is not execution evidence')
     tokenizer=AutoTokenizer.from_pretrained(str(snapshot),local_files_only=True)
     class TokenClock(BaseStreamer):
-        def __init__(self): self.seen_prompt=False; self.first=None
-        def put(self,value):
+        def __init__(self) -> None:
+            """Initialize the first-generated-ID clock.
+
+            Returns
+            -------
+            None
+                No prompt seen and no generated-ID callback observed yet.
+            """
+            self.seen_prompt=False; self.first=None
+        def put(self, value: Any) -> None:
+            """Observe generation callbacks, excluding the first prompt callback.
+
+            Parameters
+            ----------
+            value : torch.Tensor
+                Prompt IDs or next selected ID(s); not a decoded text chunk.
+
+            Returns
+            -------
+            None
+                Stores the first synchronized callback wall clock only.
+            """
             if not self.seen_prompt: self.seen_prompt=True; return
             # Same callback overhead in both treatments; not HTTP first-content time.
             torch.cuda.synchronize()
             if self.first is None: self.first=time.perf_counter()
-        def end(self): pass
-    def one(model,case,force):
+        def end(self) -> None:
+            """Receive the generation end notification without changing clocks.
+
+            Returns
+            -------
+            None
+                No output and no synthetic token timestamp.
+            """
+            pass
+    def one(model: Any, case: dict[str, str], force: bool) -> dict[str, Any]:
+        """Measure one bounded generated-ID request.
+
+        Parameters
+        ----------
+        model : causal language model
+            Already loaded treatment, on the selected CUDA device.
+        case : dict[str, str]
+            Literal text and bucket, shared between treatments.
+        force : bool
+            Force 24 selected IDs for timing; otherwise honor natural EOS.
+
+        Returns
+        -------
+        dict
+            Rendered input/IDs, literal output/IDs/stop and wall clocks in
+            seconds. The post-first proxy includes return overhead.
+        """
         messages=[dict(role='user',content=case['text'])]
         rendered=tokenizer.apply_chat_template(messages,tokenize=False,add_generation_prompt=True)
         ids=tokenizer.apply_chat_template(messages,tokenize=True,add_generation_prompt=True,return_tensors='pt').to('cuda')
@@ -141,10 +247,55 @@ def run_lab(snapshot,output_path):
     return data
 
 
-def validate_artifact(data):
-    def require(value,message):
+def validate_artifact(data: dict[str, Any]) -> bool:
+    """Validate recorded arithmetic and the archived operator smoke contract.
+
+    Parameters
+    ----------
+    data : dict
+        Candidate JSON artifact; must include both complete format treatments.
+
+    Returns
+    -------
+    bool
+        True if identity, counts, clocks, resources and cleanup agree; this
+        validates consistency, not authenticity or semantic correctness.
+
+    Raises
+    ------
+    ValueError
+        Incomplete evidence or a violated protocol field.
+    """
+    def require(value: object, message: str) -> None:
+        """Reject a false contract condition.
+
+        Parameters
+        ----------
+        value : object
+            Condition whose truth value expresses one contract check.
+        message : str
+            Explanation of the violated check.
+
+        Returns
+        -------
+        None
+            False conditions raise ValueError; no silent correction.
+        """
         if not value: raise ValueError(message)
-    def finite_number(value): return type(value) in (int,float) and math.isfinite(value)
+    def finite_number(value: object) -> bool:
+        """Recognize finite real counters while rejecting bools.
+
+        Parameters
+        ----------
+        value : object
+            Untrusted field parsed from JSON.
+
+        Returns
+        -------
+        bool
+            True only for finite built-in int or float values.
+        """
+        return type(value) in (int,float) and math.isfinite(value)
     require(data.get('contract')==PROTOCOL and data.get('status')=='complete','incomplete or wrong protocol')
     require(data.get('revision')==REVISION and data.get('model_id')==MODEL_ID,'model identity')
     require(data.get('transformers')=='4.51.3' and data.get('bitsandbytes')=='0.50.2','runtime pins')

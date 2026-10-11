@@ -19,6 +19,8 @@ import subprocess
 import time
 from datetime import datetime, timezone
 from pathlib import Path
+from typing import Any, Callable, Mapping, Sequence
+from types import FrameType
 
 PROTOCOL = 'topic03-engineering-pilot-v1'
 MODEL_ID = 'Qwen/Qwen2.5-0.5B-Instruct'
@@ -57,33 +59,93 @@ PINS = {'transformers': '4.51.3', 'accelerate': '1.6.0', 'bitsandbytes': '0.50.2
         'huggingface_hub': '0.30.2', 'safetensors': '0.5.3'}
 
 
-def utc():
+def utc() -> str:
+    """Return the current UTC timestamp.
+
+    Returns
+    -------
+    str
+        ISO 8601 timestamp with timezone, not an elapsed-time clock.
+    """
     return datetime.now(timezone.utc).isoformat()
 
 
-def checkpoint(path, data):
+def checkpoint(path: str | Path, data: Mapping[str, Any]) -> None:
+    """Atomically retain an attempt, including partial results.
+
+    Parameters
+    ----------
+    path : str or Path
+        Private attempt's JSON destination.
+    data : Mapping[str, Any]
+        JSON-serializable evidence; non-finite numbers are rejected.
+
+    Returns
+    -------
+    None
+        Replaces this attempt's checkpoint, not another attempt.
+    """
     path = Path(path)
     temporary = path.with_suffix(path.suffix + '.tmp')
     temporary.write_text(json.dumps(data, indent=2, ensure_ascii=False, allow_nan=False) + '\n', encoding='utf-8')
     temporary.replace(path)
 
 
-def score_output(output, expected):
+def score_output(output: str, expected: str) -> dict[str, Any]:
+    """Score one literal generated classification.
+
+    Parameters
+    ----------
+    output : str
+        Decoded output; only surrounding whitespace is removed.
+    expected : str
+        Gold label in LABELS.
+
+    Returns
+    -------
+    dict[str, Any]
+        Exact predicted label or None, validity and gold-label correctness.
+    """
     predicted = output.strip()  # Only surrounding whitespace may be ignored.
     valid = predicted in LABELS
     return {'predicted_label': predicted if valid else None,
             'valid_label': valid, 'correct': valid and predicted == expected}
 
 
-def summary(values):
+def summary(values: Sequence[float]) -> dict[str, float]:
+    """Summarize positive measured durations without a tail-percentile claim.
+
+    Parameters
+    ----------
+    values : Sequence[float]
+        Nonempty finite positive synchronized wall times, in seconds.
+
+    Returns
+    -------
+    dict[str, float]
+        Median, minimum and maximum in milliseconds.
+    """
     if not values or any(type(value) not in (int, float) or not math.isfinite(value) or value <= 0 for value in values):
         raise ValueError('nonempty positive finite timings required')
     return {'median_ms': 1000*statistics.median(values),
             'minimum_ms': 1000*min(values), 'maximum_ms': 1000*max(values)}
 
 
-def resource_sample(require_idle=False, startup=False):
-    """Headroom checks, NOT an OS memory sandbox. No process/account paths logged."""
+def resource_sample(require_idle: bool = False, startup: bool = False) -> dict[str, int]:
+    """Check sampled headroom, not an OS memory sandbox.
+
+    Parameters
+    ----------
+    require_idle : bool
+        Reject other GPU compute processes; never terminate them.
+    startup : bool
+        Require 5 GiB host/device free at startup instead of 2/1 GiB.
+
+    Returns
+    -------
+    dict[str, int]
+        Host and device total/available/used bytes. No account paths logged.
+    """
     lines = Path('/proc/meminfo').read_text().splitlines()
     host_available = int(next(row.split()[1] for row in lines if row.startswith('MemAvailable:')))*1024
     host_total = int(next(row.split()[1] for row in lines if row.startswith('MemTotal:')))*1024
@@ -91,18 +153,34 @@ def resource_sample(require_idle=False, startup=False):
         '--query-gpu=memory.total,memory.used,memory.free', '--format=csv,noheader,nounits'],
         text=True, timeout=10).strip()
     total, used, free = [int(part.strip())*2**20 for part in query.split(',')]
-    if host_available < (5 if startup else 2)*2**30 or free < (5 if startup else 1)*2**30:
-        raise RuntimeError('STOP: pilot headroom insufficient; diagnose, do not lower gates')
+    host_min, device_min = (5 if startup else 2), (5 if startup else 1)
+    if host_available < host_min*2**30 or free < device_min*2**30:
+        raise RuntimeError(
+            f'STOP: pilot headroom insufficient: host {host_available/2**30:.2f}/{host_min} GiB; '
+            f'device {free/2**30:.2f}/{device_min} GiB free. '
+            'Save this attempt and inspect runtime resources. Stop only your previous '
+            'model/worker, then retry preflight; never kill unknown processes or lower gates. '
+            'CPU work can continue, but it is not completed GPU evidence.')
     if require_idle:
         pids = subprocess.check_output(['nvidia-smi', '--id=0', '--query-compute-apps=pid',
                                        '--format=csv,noheader,nounits'], text=True, timeout=10).split()
         if any(pid != str(os.getpid()) for pid in pids):
-            raise RuntimeError('STOP: another GPU compute process is active')
+            raise RuntimeError('STOP: another GPU compute process is active. Inspect Colab sessions; '
+                               'stop only your own previous worker, then retry preflight. '
+                               'Do not kill unknown processes.')
     return {'host_total_bytes': host_total, 'host_available_bytes': host_available,
             'device_total_bytes': total, 'device_used_bytes': used, 'device_free_bytes': free}
 
 
-def snapshot_path():
+def snapshot_path() -> tuple[str, str]:
+    """Resolve only the pinned model, reusing the existing cache first.
+
+    Returns
+    -------
+    tuple[str, str]
+        Local snapshot path and cache-action description. Missing weights
+        may be downloaded after a 3 GiB disk-headroom check.
+    """
     from huggingface_hub import snapshot_download
     from huggingface_hub.errors import LocalEntryNotFoundError
     kwargs = {'repo_id': MODEL_ID, 'revision': REVISION,
@@ -123,8 +201,27 @@ def snapshot_path():
         return snapshot_download(**kwargs), 'downloaded_missing_pinned_snapshot'
 
 
-def profile_once(torch, model, ids, generate):
-    """Operator attribution, not a hardware bandwidth proof; overlaps are possible."""
+def profile_once(torch: Any, model: Any, ids: Any,
+                 generate: Callable[[Any, Any, int, bool], dict[str, Any]]) -> dict[str, Any]:
+    """Collect operator attribution separately from uninstrumented timings.
+
+    Parameters
+    ----------
+    torch : Any
+        Imported PyTorch module; imported only by the GPU route.
+    model : Any
+        Loaded causal language model on the selected GPU.
+    ids : Any
+        CUDA input token tensor, shape (1, prompt_tokens).
+    generate : Callable
+        Synchronized generator taking model, ids, cap and forced-length flag.
+
+    Returns
+    -------
+    dict[str, Any]
+        At most 12 inclusive operator rows in microseconds, or an explicit
+        unavailable status. Overlapping times are not HBM bandwidth proof.
+    """
     try:
         with torch.profiler.profile(activities=[torch.profiler.ProfilerActivity.CPU,
                                                torch.profiler.ProfilerActivity.CUDA]) as profile:
@@ -149,7 +246,29 @@ def profile_once(torch, model, ids, generate):
                 'limitation': 'No profile-based causal interpretation is supported by this attempt.'}
 
 
-def run(output, lengths=(24, 96), trials=5, order=('fp16', 'nf4'), timeout_s=600):
+def run(output: str | Path, lengths: Sequence[int] = (24, 96), trials: int = 5,
+        order: Sequence[str] = ('fp16', 'nf4'), timeout_s: int = 600) -> dict[str, Any]:
+    """Run the fixed paired teaching workload, retaining partial evidence.
+
+    Parameters
+    ----------
+    output : str or Path
+        Fresh private JSON destination; an existing attempt is never replaced.
+    lengths : Sequence[int]
+        Fixed generated-token counts (24, 96), not prompt lengths.
+    trials : int
+        Exactly five measured trials per length and format.
+    order : Sequence[str]
+        Each of fp16 and nf4 exactly once; ordering may confound timings.
+    timeout_s : int
+        Absolute GPU-worker wall budget, 120 through 600 seconds.
+
+    Returns
+    -------
+    dict[str, Any]
+        Validated timing, task, storage and cleanup evidence. This does not
+        certify production accuracy or an independently completed student lab.
+    """
     from importlib.metadata import version
     output = Path(output)
     if output.exists():
@@ -184,7 +303,21 @@ def run(output, lengths=(24, 96), trials=5, order=('fp16', 'nf4'), timeout_s=600
     torch = None
     previous_alarm = signal.getsignal(signal.SIGALRM)
     previous_term = signal.getsignal(signal.SIGTERM)
-    def stop(signum, frame):
+    def stop(signum: int, frame: FrameType | None) -> None:
+        """Abort a worker when its bounded lifetime ends.
+
+        Parameters
+        ----------
+        signum : int
+            Delivered alarm or termination signal.
+        frame : FrameType or None
+            Interrupted frame, unused by this handler.
+
+        Returns
+        -------
+        None
+            Never returns normally; raises TimeoutError for retained failure.
+        """
         raise TimeoutError('Pilot wall budget or external termination reached')
     signal.signal(signal.SIGALRM, stop)
     signal.signal(signal.SIGTERM, stop)
@@ -201,13 +334,43 @@ def run(output, lengths=(24, 96), trials=5, order=('fp16', 'nf4'), timeout_s=600
                               '--format=csv,noheader'], text=True, timeout=10).strip()}
         snapshot, data['cache_action'] = snapshot_path()
         tokenizer = AutoTokenizer.from_pretrained(snapshot, local_files_only=True)
-        def tokenized(messages):
+        def tokenized(messages: Sequence[Mapping[str, str]]) -> tuple[str, Any]:
+            """Render and tokenize the same chat for both treatments.
+
+            Parameters
+            ----------
+            messages : Sequence[Mapping[str, str]]
+                Ordered role/content messages for the pinned chat template.
+
+            Returns
+            -------
+            tuple[str, Any]
+                Literal rendered chat and CUDA IDs, shape (1, prompt_tokens).
+            """
             rendered = tokenizer.apply_chat_template(messages, tokenize=False, add_generation_prompt=True)
             ids = tokenizer.apply_chat_template(messages, tokenize=True, add_generation_prompt=True, return_tensors='pt')
             if not isinstance(ids, torch.Tensor):
                 ids = ids['input_ids']
             return rendered, ids.to('cuda')
-        def generate(model, ids, cap, forced):
+        def generate(model: Any, ids: Any, cap: int, forced: bool) -> dict[str, Any]:
+            """Measure synchronized generation, excluding input transfer.
+
+            Parameters
+            ----------
+            model : Any
+                Loaded causal language model.
+            ids : Any
+                CUDA token tensor of shape (1, prompt_tokens).
+            cap : int
+                Maximum generated tokens, excluding the prompt.
+            forced : bool
+                Force exactly cap tokens for synthetic timing, not task quality.
+
+            Returns
+            -------
+            dict[str, Any]
+                Wall seconds, output token count, IDs and decoded text.
+            """
             kwargs = {'do_sample': False, 'max_new_tokens': cap, 'use_cache': True,
                       'pad_token_id': tokenizer.eos_token_id}
             if forced:
@@ -330,12 +493,49 @@ def run(output, lengths=(24, 96), trials=5, order=('fp16', 'nf4'), timeout_s=600
     return data
 
 
-def validate_artifact(data):
-    """CPU structural check. Passing is not semantic quality or causality certification."""
-    def require(condition, reason):
+def validate_artifact(data: Mapping[str, Any]) -> bool:
+    """Validate evidence structurally without running inference.
+
+    Parameters
+    ----------
+    data : Mapping[str, Any]
+        Complete paired artifact with raw attempts and cleanup observations.
+
+    Returns
+    -------
+    bool
+        True after all checks; not semantic-quality or causality certification.
+    """
+    def require(condition: bool, reason: str) -> None:
+        """Reject a violated evidence invariant.
+
+        Parameters
+        ----------
+        condition : bool
+            Invariant to require.
+        reason : str
+            Diagnostic for the violated invariant.
+
+        Returns
+        -------
+        None
+            Raises ValueError on failure.
+        """
         if not condition:
             raise ValueError(reason)
-    def number(value):
+    def number(value: Any) -> bool:
+        """Recognize a finite positive measurement, excluding booleans.
+
+        Parameters
+        ----------
+        value : Any
+            Candidate numeric measurement.
+
+        Returns
+        -------
+        bool
+            True only for positive finite Python int/float values.
+        """
         return type(value) in (int, float) and math.isfinite(value) and value > 0
     require(data.get('contract') == PROTOCOL and data.get('status') == 'complete', 'complete pilot protocol')
     require(data.get('model_id') == MODEL_ID and data.get('revision') == REVISION, 'pinned model identity')
@@ -429,7 +629,14 @@ def validate_artifact(data):
     return True
 
 
-def main():
+def main() -> None:
+    """Dispatch the GPU worker or CPU evidence validator from explicit CLI flags.
+
+    Returns
+    -------
+    None
+        Emits one completion summary; propagates failed-run diagnostics.
+    """
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--output', type=Path)
     parser.add_argument('--lengths', nargs=2, type=int, default=[24, 96])

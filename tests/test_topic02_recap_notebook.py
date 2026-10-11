@@ -13,6 +13,7 @@ import socket
 import sys
 import unittest
 from unittest.mock import patch
+from notebook_static_fixtures import helper_module, recorded_literal
 
 ROOT = Path(__file__).resolve().parents[1]
 COURSE_ROOT = ROOT if (ROOT / "seminars").exists() else ROOT.parent
@@ -28,7 +29,8 @@ class Topic02RecapNotebookTests(unittest.TestCase):
                     if cell["cell_type"] == "code"]
 
     def test_output_free_and_code_compiles(self):
-        self.assertEqual(len(self.notebook["cells"]), 26)
+        self.assertEqual(len(self.notebook["cells"]), 57)
+        self.assertEqual(len(self.code), 28)
         for cell in self.notebook["cells"]:
             if cell["cell_type"] == "code":
                 self.assertEqual(cell["outputs"], [])
@@ -36,9 +38,7 @@ class Topic02RecapNotebookTests(unittest.TestCase):
                 compile("".join(cell["source"]), cell["id"], "exec")
 
     def test_capture_raw_json_preserves_recorded_bytes(self):
-        assignment = ast.parse(self.code[3]).body[0]
-        self.assertEqual(assignment.targets[0].id, "RECORDED_BLOCK")
-        raw = assignment.value.args[0].value
+        raw = recorded_literal(self.notebook, "RECORDED_BLOCK")
         self.assertIsInstance(raw, str)
         self.assertEqual(hashlib.sha256(raw.encode("utf-8")).hexdigest(), CAPTURE_SHA256)
         # Hash before parsing: a JavaScript parse/stringify pass can alter the
@@ -48,42 +48,46 @@ class Topic02RecapNotebookTests(unittest.TestCase):
         self.assertIs(captured["method"]["output_attentions"], False)
         self.assertEqual(captured["prompt"]["last_input_token"]["id"], 198)
 
-    def test_first_four_cells_execute_without_network_or_torch(self):
-        namespace, output = {}, io.StringIO()
+    def test_cpu_helper_units_without_network_or_torch(self):
+        output = io.StringIO()
         before = set(sys.modules)
         with patch.object(socket, "socket", side_effect=AssertionError("CPU recap must stay offline")), \
              patch.object(socket, "create_connection", side_effect=AssertionError("CPU recap must stay offline")), \
              contextlib.redirect_stdout(output):
-            for source in self.code[:4]:
-                exec(source, namespace)
-            exec(self.code[3].replace("STEP = 0", "STEP = 1", 1), namespace)
+            recap = helper_module(self.notebook, 'recap_namespace')
+            mechanisms = helper_module(self.notebook, 'mechanism_namespace')
+            toy = recap['toy_example']()
+            cache_ab = mechanisms['cache_ab'](toy)
+            online = mechanisms['online_example']()
         self.assertFalse(any(name == "torch" or name.startswith("torch.")
                              for name in set(sys.modules)-before))
-        self.assertNotIn("MODELS", namespace)
-        self.assertEqual(namespace["TOY"]["output"], {"position":2,"index":3,"label":"D"})
-        self.assertEqual(namespace["block_step"]["selected_token"]["id"], 11)
-        self.assertEqual(namespace["block_step"]["selection_position"], 42)
-        for index, row in enumerate(namespace["TOY"]["stages"]["probabilities"]):
+        self.assertNotIn("MODELS", recap)
+        self.assertEqual(toy["output"], {"position":2,"index":3,"label":"D"})
+        captured = json.loads(recorded_literal(self.notebook, 'RECORDED_BLOCK'))
+        self.assertEqual(captured['steps'][1]["selected_token"]["id"], 11)
+        self.assertEqual(captured['steps'][1]["selection_position"], 42)
+        for index, row in enumerate(toy["stages"]["probabilities"]):
             self.assertAlmostEqual(sum(row), 1)
             self.assertTrue(all(value == 0 for value in row[index+1:]))
-        self.assertIn("CPU FP32 reconstruction; not observed SDPA weights", output.getvalue())
-        self.assertIn("ILLUSTRATIVE", output.getvalue())
-        self.assertIn("pip", self.code[4])
-        self.assertEqual(namespace["CACHE_AB"]["baseline"]["qkv_projection_row_calls"],1395)
-        self.assertEqual(namespace["CACHE_AB"]["cached"]["qkv_projection_row_calls"],153)
-        self.assertLess(namespace["CACHE_AB"]["max_abs_logit_difference"],1e-12)
-        self.assertAlmostEqual(namespace["ONLINE"]["states"][-1]["output"][0],27/7)
+        self.assertTrue(any('CPU FP32 reconstruction; not observed SDPA weights' in code for code in self.code))
+        self.assertIn('illustrative', recap['__doc__'])
+        self.assertIn('invented weights, not Qwen', recap['__doc__'])
+        self.assertTrue(any('pip' in code for code in self.code))
+        self.assertEqual(cache_ab["baseline"]["qkv_projection_row_calls"],1395)
+        self.assertEqual(cache_ab["cached"]["qkv_projection_row_calls"],153)
+        self.assertLess(cache_ab["max_abs_logit_difference"],1e-12)
+        self.assertAlmostEqual(online["states"][-1]["output"][0],27/7)
 
     def test_optional_live_is_off_and_preserves_protocol_namespace(self):
         source = next(code for code in self.code if "RUN_CONCRETE_PROMPT_LIVE =" in code)
         self.assertIs(ast.parse(source).body[0].value.value, False)
-        sentinel = {"unchanged":True}
-        namespace = {"PROTOCOL":"topic02-phase-v2","MODELS":sentinel}
-        with contextlib.redirect_stdout(io.StringIO()):
-            exec(source, namespace)
-        self.assertEqual(namespace["PROTOCOL"], "topic02-phase-v2")
-        self.assertIs(namespace["MODELS"], sentinel)
-        self.assertNotIn("LIVE_PROMPT", namespace)
+        tree = ast.parse(source)
+        assignments = [n for n in ast.walk(tree) if isinstance(n, ast.Assign)]
+        assigned_names = {t.id for n in assignments for t in n.targets if isinstance(t, ast.Name)}
+        self.assertNotIn('PROTOCOL', assigned_names)
+        self.assertNotIn('MODELS', assigned_names)
+        self.assertTrue(any(isinstance(n, ast.If) and isinstance(n.test, ast.Name)
+                            and n.test.id == 'RUN_CONCRETE_PROMPT_LIVE' for n in tree.body))
 
 
 if __name__ == "__main__":

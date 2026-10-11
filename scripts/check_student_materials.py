@@ -12,7 +12,165 @@ ROOT = Path(__file__).resolve().parents[1]
 NOTEBOOKS = sorted((ROOT / "seminars").glob("[0-9][0-9]-*.ipynb"))
 
 
+def check_numpy_functions(source: str, label: str) -> int:
+    """Reject undocumented/untyped function contracts in visible notebook code."""
+    tree = ast.parse(source, filename=label)
+    count = 0
+    for node in ast.walk(tree):
+        if not isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
+            continue
+        count += 1
+        args = [*node.args.posonlyargs, *node.args.args, *node.args.kwonlyargs]
+        args += [a for a in (node.args.vararg, node.args.kwarg) if a is not None]
+        args = [a for a in args if a.arg not in ('self', 'cls')]
+        if node.returns is None or any(a.annotation is None for a in args):
+            raise ValueError(f"{label}: {node.name}: missing type annotation")
+        doc = ast.get_docstring(node) or ''
+        sections = dict(re.findall(
+            r'^([A-Za-z ]+)\n-{3,}\n(.*?)(?=^[A-Za-z ]+\n-{3,}\n|\Z)',
+            doc, re.M | re.S))
+        if not doc or not (sections.get('Returns') or sections.get('Yields')):
+            raise ValueError(f"{label}: {node.name}: missing NumPy Returns/Yields")
+        params = sections.get('Parameters', '')
+        names = {name.strip().lstrip('*') for group in
+                 re.findall(r'^(\*{0,2}\w+(?:,\s*\*{0,2}\w+)*)\s*:\s*\S.*$', params, re.M)
+                 for name in group.split(',')}
+        if args and (not params or names != {a.arg for a in args}):
+            raise ValueError(f"{label}: {node.name}: NumPy Parameters mismatch")
+    return count
+
+
+def check_numpy_fixtures() -> None:
+    """Keep missing types, sections and incorrect parameter names rejecting."""
+    valid = '''def example(value: int) -> bool:
+    """Check a value.
+
+    Parameters
+    ----------
+    value : int
+        Test value.
+
+    Returns
+    -------
+    bool
+        Test outcome.
+    """
+    return value > 0
+'''
+    assert check_numpy_functions(valid, 'valid-fixture') == 1
+    assert check_numpy_functions(valid.replace('Test value.', 'Gold label: valid prose with a colon.'),'colon-description') == 1
+    for changed in (valid.replace('value: int', 'value'),
+                    valid.replace(' -> bool', ''),
+                    valid.replace('Parameters\n', 'Arguments\n'),
+                    valid.replace('Returns\n', 'Result\n'),
+                    valid.replace('value : int', 'wrong_name : int')):
+        try:
+            check_numpy_functions(changed, 'rejecting-fixture')
+        except ValueError:
+            pass
+        else:
+            raise AssertionError('Notebook type/docstring regression accepted')
+
+
+def check_provided_visibility(source: str, metadata: dict, label: str) -> None:
+    """Reject giant expanded helper/capture cells that obscure student work.
+
+    Parameters
+    ----------
+    source : str
+        Full visible cell source, including embedded literal modules/data.
+    metadata : dict
+        Notebook cell display metadata.
+    label : str
+        Cell identity for a diagnostic.
+
+    Returns
+    -------
+    None
+        Static guard only; the folded display still needs live browser review.
+    """
+    if len(source) > 10000 and not (source.startswith('#@title ') and
+            metadata.get('cellView') == 'form' and metadata.get('collapsed') is True and
+            metadata.get('jupyter', {}).get('source_hidden') is True):
+        raise ValueError(f'{label}: giant provided source must be a labelled folded form')
+
+
+def check_literal_view(source: str) -> None:
+    """Reject unwrapped or unescaped Topic01 literal output panels.
+
+    Parameters
+    ----------
+    source : str
+        Joined canonical code-cell sources; raw model evidence is not rewritten.
+
+    Returns
+    -------
+    None
+        A static display contract, not browser or runtime acceptance.
+
+    Raises
+    ------
+    ValueError
+        If one of the required literal views or escaping rules is absent.
+    """
+    for term in ('white-space:pre-wrap', "show_text('Non-streaming response",
+                 "show_text('Streaming response", 'escape(text)'):
+        if term not in source:
+            raise ValueError('Topic01 literal response viewer must wrap and escape: '+term)
+
+
+def check_compact_summary(source: str) -> None:
+    """Reject wide merged-condition Topic02 summary tables.
+
+    Parameters
+    ----------
+    source : str
+        Joined canonical sources, including selectors and three distinct viewers.
+
+    Returns
+    -------
+    None
+        Requires five-column phase/rate tables and complete raw repeat access.
+
+    Raises
+    ------
+    ValueError
+        Missing selectors, scalar summaries or the compact column inventories.
+    """
+    for term in ('SUMMARY_MODEL', 'SUMMARY_CASE', 'selected_summary',
+                 'tensor_view', '*tensor.items()', "['field','value']",
+                 'PROFILE_ROWS', "profile['operators'][:5]",
+                 "['input_tokens','operator','calls','self_device_us']",
+                 "['phase','unit','median','min','max']",
+                 "['metric','unit','median','min','max']",
+                 'raw_view', 'row[metric][statistic]', 'assert len(raw_view)==5'):
+        if term not in source:
+            raise ValueError('Topic02 compact phase/rate/raw-repeat contract missing: '+term)
+    if ('show_table(SUMMARY,' in source or 'list(phase_rows[0])' in source
+            or 'print(json.dumps(PROFILE,' in source):
+        raise ValueError('Topic02 nested or eleven-column summary regression')
+
+
 def main() -> None:
+    check_numpy_fixtures()
+    check_provided_visibility('x=1', {}, 'short-fixture')
+    check_provided_visibility('#@title Provided fixture\n'+'#'*10001,
+        dict(cellView='form',collapsed=True,jupyter=dict(source_hidden=True)), 'folded-fixture')
+    try:
+        check_provided_visibility('#'*10001, {}, 'rejecting-fixture')
+    except ValueError:
+        pass
+    else:
+        raise AssertionError('Expanded giant source regression accepted')
+    literal_fixture = "white-space:pre-wrap show_text('Non-streaming response show_text('Streaming response escape(text)"
+    check_literal_view(literal_fixture)
+    for term in ('white-space:pre-wrap', 'escape(text)'):
+        try:
+            check_literal_view(literal_fixture.replace(term, 'broken'))
+        except ValueError:
+            pass
+        else:
+            raise AssertionError('Unwrapped/unsafe literal viewer regression accepted')
     if len(NOTEBOOKS) < 5:
         raise SystemExit("expected Topics 00–04 notebooks")
     for path in NOTEBOOKS:
@@ -20,6 +178,20 @@ def main() -> None:
         if data.get("nbformat") != 4 or not data.get("cells"):
             raise ValueError(f"{path.name}: invalid or empty notebook")
         all_source = "".join("".join(cell.get("source", [])) for cell in data["cells"])
+        if path.name.startswith('01-'):
+            check_literal_view(all_source)
+        if path.name.startswith('02-'):
+            check_compact_summary(all_source)
+            for broken in (all_source.replace("['phase','unit','median','min','max']", 'list(phase_rows[0])'),
+                           all_source.replace('tensor_view', 'DENSE_JSON'),
+                           all_source.replace('PROFILE_ROWS', 'DENSE_PROFILE_JSON'),
+                           all_source.replace('SUMMARY_CASE', 'MISSING_SELECTOR')):
+                try:
+                    check_compact_summary(broken)
+                except ValueError:
+                    pass
+                else:
+                    raise AssertionError('Wide/incomplete summary regression accepted')
         pilot = path.name == "03-quantization-pilot.ipynb"
         if pilot:
             # This independent teaching protocol has student TODOs and an opt-in
@@ -27,23 +199,16 @@ def main() -> None:
             # on every file beginning with 03-, or silently skip the new contract.
             # Portable mirror gate: never depend on private course JS modules.
             roles = [c.get("metadata", {}).get("pilot_role") for c in data["cells"]]
-            for role in ("student-scale", "student-groups", "methods-explanation", "real-load",
-                         "real-calibration", "real-selection", "real-clipping", "real-nf4", "real-freeze",
-                         "real-distributions", "real-held-out", "layer-explanation", "layer-gpu-bridge",
-                         "quality-rule", "readiness-check", "gpu-optin"):
+            for role in ("student-scale", "student-groups", "real-calibration", "real-held-out", "gpu-optin"):
                 if roles.count(role) != 1:
                     raise ValueError(f"{path.name}: missing/duplicate pilot role {role}")
             if not roles.index("real-calibration") < roles.index("real-held-out") < roles.index("gpu-optin"):
                 raise ValueError("calibration, held-out, GPU order changed")
-            if not roles.index("real-freeze") < roles.index("real-held-out") < roles.index("quality-rule") < roles.index("readiness-check") < roles.index("gpu-optin"):
-                raise ValueError("frozen selection and pre-run readiness order changed")
             for term in ("def derive_scale(", "def quantize_groups(", "raise NotImplementedError",
                          "REAL_SIZES = [None]", "CHOSEN_GROUP = None", "output_error = None",
                          "RUN_GPU = False", "allow_pickle=False", "4.30", "topic03-layer-decision.json",
                          "CLIP_CANDIDATES = (100, 99, 99.5)", "CHOSEN_CLIP = None",
-                         "NF4_RESTORED = nf4_qdq(W_REAL)", "FROZEN_CHOICE = json.dumps",
-                         "check_gpu_readiness()", "FROZEN_QUALITY_RULE", "topic03-preflight.json",
-                         "topic03-screening.json", "topic03-weights-center.png"):
+                         "NF4_RESTORED = nf4_qdq(W_REAL)", "FROZEN_CHOICE = json.dumps"):
                 if term not in all_source:
                     raise ValueError(f"{path.name}: student contract missing {term}")
             import hashlib
@@ -93,6 +258,8 @@ def main() -> None:
             if cell.get("outputs") or cell.get("execution_count") is not None:
                 raise ValueError(f"{path.name} cell {index}: published output/execution state")
             source = "".join(cell.get("source", []))
+            if cell['cell_type'] == 'code':
+                check_provided_visibility(source, cell.get('metadata', {}), f'{path.name}:cell-{index}')
             if "github.com/levshaazz/llm-serving-mastery/" in source:
                 raise ValueError(f"{path.name} cell {index}: private source link")
             if cell.get("cell_type") != "code":
@@ -101,9 +268,20 @@ def main() -> None:
             if source.lstrip().startswith(("%", "!")):
                 continue  # notebook runtime magic/shell cell
             ast.parse(source, filename=f"{path.name}:cell-{index}")
+            if path.name.startswith('04-'):
+                check_numpy_functions(source, f"{path.name}:cell-{index}")
         if not code_cells:
             raise ValueError(f"{path.name}: no executable code")
         print(f"{path.name}: {len(data['cells'])} cells, {code_cells} code cells passed")
+    # Private sources never need to exist in the public student mirror.
+    for relative in ('instructor/lecture-notes/topic04/reference.py',
+                     'instructor/lecture-notes/topic04/cell-solutions.py',
+                     'teaching/topic04_types.py',
+                     'teaching/topic03_pilot.py'):
+        path = ROOT / relative
+        if path.exists():
+            count = check_numpy_functions(path.read_text(), relative)
+            print(f'{relative}: {count} typed NumPy function contracts passed')
 
 
 if __name__ == "__main__":

@@ -12,6 +12,7 @@ import sys
 import tempfile
 import unittest
 from unittest.mock import patch
+from notebook_static_fixtures import helper_module, recorded_json
 
 ROOT=Path(__file__).resolve().parents[1]
 # In the private source, notebooks live one level above submission-template.
@@ -53,7 +54,7 @@ class Topic0304NotebookTests(unittest.TestCase):
         module=importlib.util.module_from_spec(spec); spec.loader.exec_module(module)
         return module.validate_artifact
 
-    def execute_cpu(self,topic):
+    def cpu_helper_fixtures(self,topic):
         code=self.load(topic); namespace={}; before=set(sys.modules)
         with patch.object(socket,'socket',side_effect=AssertionError('CPU replay cannot connect')), \
              patch.object(socket,'create_connection',side_effect=AssertionError('CPU replay cannot connect')), \
@@ -65,14 +66,10 @@ class Topic0304NotebookTests(unittest.TestCase):
                 # claim independent completion of the teaching assignment.
                 data=json.loads((NOTEBOOK_ROOT/'seminars/04-vllm-openai-serving.ipynb').read_text())
                 roles={c.get('metadata',{}).get('investigation_role'):c for c in data['cells']}
-                exec(''.join(roles['provided-cpu']['source']),namespace)
-                namespace['FIXTURE']=namespace['parser_namespace']['synthetic_fixture']()
-                nodes=ast.parse(''.join(roles['real-replay']['source'])).body
-                assignment=next(n for n in nodes if isinstance(n,ast.Assign)
-                    and any(isinstance(t,ast.Name) and t.id=='RECORDED_SERVICE' for t in n.targets))
-                namespace['json']=json
-                exec(compile(ast.Module(body=[assignment],type_ignores=[]),'recorded-assignment','exec'),namespace)
-                parser=namespace['parser_namespace']['ChatStream']()
+                parser_module=helper_module(data,'parser_namespace')
+                namespace['FIXTURE']=parser_module['synthetic_fixture']()
+                namespace['RECORDED_SERVICE']=recorded_json(data,'RECORDED_SERVICE')
+                parser=parser_module['ChatStream']()
                 for chunk in namespace['RECORDED_SERVICE']['raw_sse']['chunks']:
                     parser.feed(bytes.fromhex(chunk['hex']),chunk['at_s'])
                 namespace['REPLAY']=parser.finish()
@@ -82,25 +79,28 @@ class Topic0304NotebookTests(unittest.TestCase):
                 self.assertIn('RUN_GPU=False',optin)
                 self.assertTrue(any('if not matches' in c and 'pip' in c for c in code))
             else:
-                for source in code[:3]: exec(source,namespace)
+                data=json.loads((NOTEBOOK_ROOT/'seminars/03-quantization-tradeoffs.ipynb').read_text())
+                toy_module=helper_module(data,'toy_namespace')
+                namespace['TOY']=toy_module['toy_example']()
+                namespace['RECORDED_QUANTIZATION']=recorded_json(data,'RECORDED_QUANTIZATION')
         self.assertFalse(any(n=='torch' or n.startswith('torch.') for n in set(sys.modules)-before))
         self.assertNotIn('lab_namespace',namespace)
-        if topic != '04': self.assertIn('pip',code[3])
+        if topic != '04': self.assertTrue(any('pip' in cell for cell in code))
         return namespace
 
     def test_topic03_offline_and_real_artifact(self):
-        ns=self.execute_cpu('03')
+        ns=self.cpu_helper_fixtures('03')
         self.assertEqual(ns['TOY']['packed_hex'],['e9','71','c1','84'])
         self.assertTrue(self.validator('03')(ns['RECORDED_QUANTIZATION']))
 
     def test_topic04_offline_and_real_artifact(self):
-        ns=self.execute_cpu('04')
+        ns=self.cpu_helper_fixtures('04')
         self.assertEqual(ns['FIXTURE']['complete']['content'],'Café ☕.')
         self.assertEqual(ns['REPLAY']['status'],'complete')
         self.assertTrue(self.validator('04')(ns['RECORDED_SERVICE']))
 
     def test_quantization_negative_artifacts(self):
-        original=self.execute_cpu('03')['RECORDED_QUANTIZATION']; validate=self.validator('03')
+        original=self.cpu_helper_fixtures('03')['RECORDED_QUANTIZATION']; validate=self.validator('03')
         mutations=[lambda x:x.update(status='running'),lambda x:x.update(revision='main'),
             lambda x:x.update(transformers='unknown'),lambda x:x.update(quantization={}),
             lambda x:x['formats']['nf4_w4a16'].update(quantized_linear_modules=0),
@@ -123,7 +123,7 @@ class Topic0304NotebookTests(unittest.TestCase):
             with self.assertRaises((ValueError,KeyError,TypeError)): validate(bad)
 
     def test_serving_negative_artifacts(self):
-        original=self.execute_cpu('04')['RECORDED_SERVICE']; validate=self.validator('04')
+        original=self.cpu_helper_fixtures('04')['RECORDED_SERVICE']; validate=self.validator('04')
         mutations=[lambda x:x.update(status='failed'),lambda x:x.update(vllm='unknown'),
             lambda x:x.update(served_name='wrong'),lambda x:x.update(advertised_models=[]),
             lambda x:x['raw_sse'].update(content='invented'),lambda x:x['raw_sse'].update(done=False),

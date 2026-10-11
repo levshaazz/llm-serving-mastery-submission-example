@@ -12,7 +12,20 @@ MODELS = {
 CASES = [(1, 128, 32), (1, 4096, 32), (1, 128, 128), (1, 4096, 128), (4, 128, 32)]
 
 
-def validate(data):
+def validate(data: dict) -> int:
+    """Validate completed protocol-v2 matrix identity and raw arithmetic.
+
+    Parameters
+    ----------
+    data : dict
+        Full 50-trial benchmark JSON, not a smoke or recorded prompt replay.
+
+    Returns
+    -------
+    int
+        Number of validated raw trials; inconsistency raises ValueError.
+        This is not an authenticity or bottleneck-conclusion certification.
+    """
     if (data.get("protocol"), data.get("status"), data.get("scope"), data.get("trials")) != (
             "topic02-phase-v2", "complete", "core", 5):
         raise ValueError("Expected a completed core protocol-v2 run with five trials; smoke/partial is not complete")

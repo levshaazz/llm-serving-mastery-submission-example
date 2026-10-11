@@ -12,13 +12,18 @@ Streaming parsing, plotting and owned-server cleanup are provided infrastructure
 The [50-slide core](https://levshaazz.github.io/llm-serving-mastery/Lectures/04-vllm-serving-core.html)
 is the main route; the 96-slide deck is optional reference. Read [Book 04](https://levshaazz.github.io/llm-serving-mastery/en/book/04/).
 
-The unchanged v3 notebook code passed separate private instructor reference runs
-on Tesla T4 / Colab High RAM on 8 October 2026, for prompt and format challengers
-on calibration. Each selected baseline before held-out and verified both teardowns.
-This is not a fresh student run, useful classifier-quality guarantee or latency A/B.
-Format itself was not tested on held-out. GPU defaults false; standard-RAM Colab
-and independent learner completion remain unverified. Keep the 24 GiB available-RAM
-safety gate rather than weakening it. The notebook contains no teacher solutions or outputs.
+The current v3 notebook code passed separate live-browser private instructor runs
+on Tesla T4 / standard 12.67 GB RAM on 11 October 2026, High RAM disabled, for
+prompt and format challengers. Each froze its calibration choice before held-out
+and verified both owned-server teardowns. This is not independent student completion,
+a useful classifier-quality guarantee or latency A/B. Results and solutions stay private.
+GPU defaults false. The current sequential small-model student profile reserves
+5 GiB host/device headroom before installation and 2 GiB host / 512 MiB device
+headroom during execution; the stricter 24 GiB instructor/judge envelope is separate.
+A paid-account standard-RAM run does not certify free GPU quota. Do not lower the
+measured preflight gates. The notebook contains no teacher solutions or outputs.
+This prose-only follow-up keeps every code cell, ID and metadata unchanged;
+the whole-file hash differs from the pristine rehearsed template.
 
 ## Topic 03 — quantization investigation
 
@@ -28,14 +33,18 @@ Download the [complete lab ZIP](https://levshaazz.github.io/llm-serving-mastery/
 in Colab upload `topic03_pilot.py` and `topic03-real-layer.npz` from it. Local copies
 also live in `teaching/` and `public/downloads/`. The older
 `03-quantization-tradeoffs.ipynb` remains historical, not the required current route.
-The current guided-investigation-v6 notebook passed a complete standard-RAM Colab
-T4 rehearsal with explicit private instructor solutions on 6 October: all 27 code
-cells in order, no errors, both profiles complete and zero post-worker GPU use.
-The [dated v6 receipt](https://levshaazz.github.io/llm-serving-mastery/seminars/runs/2026-10-06-topic03-v6-colab/README.md)
-binds the immutable archived v6 template. This prose-only follow-up preserves all
-25 student code cells, their identifiers and metadata exactly; the whole-file hash
-differs because explanations changed. Historical captures remain separate.
-Learner validation is still pending, independently of technical execution.
+The current guided-investigation-v7 notebook passed a complete live-browser Colab
+T4 rehearsal on 11 October 2026 with standard 12.67 GB RAM and explicit private
+instructor solutions: all 49 student code cells, private bootstrap and export,
+no execution errors, both profiles complete. Results remain private. This
+prose-only follow-up preserves all code cells, identifiers and metadata exactly;
+the whole-file hash differs only because readiness explanations changed.
+The [status summary](https://levshaazz.github.io/llm-serving-mastery/data/notebook-release.json)
+records pristine/delivered hashes, not solutions or experiment results.
+The immutable archived v6 template and its old measurements remain historical.
+Learner validation and free GPU quota are unverified, independently of execution.
+The historical notebook's default CPU route passed a browser run; its optional
+24 GiB GPU route was not tested in this migration.
 The lab now compares grouping, calibration-selected clipping and supplied NF4
 on the same weights/inputs before the separate whole-model GPU A/B.
 
@@ -44,6 +53,16 @@ The NPZ derives from Qwen/Qwen2.5-0.5B-Instruct revision
 Apache License 2.0; the exact [upstream license](public/downloads/QWEN-LICENSE.txt) is included.
 Modification: export of layer-12 MLP down-projection rows 0–63 as FP16 arrays,
 plus recorded FP32 user-position activations. This is not a complete checkpoint.
+
+## Notebook readability and verification — 11 October 2026
+
+All six released notebooks use short one-action/one-result cells. Student functions
+and provided visible helpers carry type annotations and NumPy-style docstrings.
+The current Topics 00–04 GPU routes were checked by live Colab browser runs on
+T4 / standard RAM, including both Topic04 challengers; execution is distinct
+from learner validation. Definition cells may be silent. Result viewers do not
+rerun model inference. Preserve all failed attempts and raw measurements in your
+own private submission; never turn a CPU fallback into claimed GPU evidence.
 
 Use this public repository as the starting point for your own leaderboard submission and for the
 course notebooks. Create a repository from it, replace the author and experiment notes, and keep

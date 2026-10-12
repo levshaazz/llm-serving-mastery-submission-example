@@ -12,7 +12,7 @@ import sys
 import tempfile
 import unittest
 from unittest.mock import patch
-from notebook_static_fixtures import helper_module, recorded_json
+from notebook_static_fixtures import code_cells, helper_module, python_body, recorded_json
 
 ROOT=Path(__file__).resolve().parents[1]
 # In the private source, notebooks live one level above submission-template.
@@ -45,8 +45,8 @@ class Topic0304NotebookTests(unittest.TestCase):
         for cell in data['cells']:
             if cell['cell_type']=='code':
                 self.assertEqual(cell['outputs'],[]); self.assertIsNone(cell['execution_count'])
-                compile(''.join(cell['source']),cell['id'],'exec')
-        return [''.join(c['source']) for c in data['cells'] if c['cell_type']=='code']
+                compile(python_body(''.join(cell['source'])),cell['id'],'exec')
+        return code_cells(data)
 
     def validator(self,topic):
         path=ROOT/'scripts'/f'validate_topic{topic}.py'
@@ -77,7 +77,11 @@ class Topic0304NotebookTests(unittest.TestCase):
                     self.assertIn('raise NotImplementedError',''.join(roles[role]['source']))
                 optin=''.join(roles['gpu-optin']['source'])
                 self.assertIn('RUN_GPU=False',optin)
-                self.assertTrue(any('if not matches' in c and 'pip' in c for c in code))
+                if data['metadata'].get('isolated_runtime'):
+                    self.assertTrue(any("runtime.install_runtime(RUNTIME_ROOT, 'serving')" in c for c in code))
+                    self.assertTrue(any("opt_in['stdout'].strip() == 'True'" in c for c in code))
+                else:
+                    self.assertTrue(any('if not matches' in c and 'pip' in c for c in code))
             else:
                 data=json.loads((NOTEBOOK_ROOT/'seminars/03-quantization-tradeoffs.ipynb').read_text())
                 toy_module=helper_module(data,'toy_namespace')
@@ -85,7 +89,13 @@ class Topic0304NotebookTests(unittest.TestCase):
                 namespace['RECORDED_QUANTIZATION']=recorded_json(data,'RECORDED_QUANTIZATION')
         self.assertFalse(any(n=='torch' or n.startswith('torch.') for n in set(sys.modules)-before))
         self.assertNotIn('lab_namespace',namespace)
-        if topic != '04': self.assertTrue(any('pip' in cell for cell in code))
+        if topic != '04':
+            if data['metadata'].get('isolated_runtime'):
+                guard = next(c for c in code if 'RUN_GPU = False' in c)
+                self.assertIn("raise RuntimeError('Optional historical 24 GiB GPU migration pending; not a current student run')", guard)
+                self.assertFalse(any("runtime.install_runtime(RUNTIME_ROOT, 'bnb')" in c for c in code))
+            else:
+                self.assertTrue(any('pip' in cell for cell in code))
         return namespace
 
     def test_topic03_offline_and_real_artifact(self):

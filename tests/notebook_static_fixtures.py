@@ -7,8 +7,16 @@ import ast
 import json
 
 
+def python_body(source):
+    """Inspect Python behind the one reviewed worker magic; never run a cell."""
+    if source.startswith('%%lsm\n'):
+        source = source[len('%%lsm\n'):]
+    assert not source.startswith('%'), 'Unknown notebook magic must not be skipped'
+    return source
+
+
 def code_cells(notebook):
-    return [''.join(c['source']) for c in notebook['cells'] if c['cell_type'] == 'code']
+    return [python_body(''.join(c['source'])) for c in notebook['cells'] if c['cell_type'] == 'code']
 
 
 def recorded_literal(notebook, name):

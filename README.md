@@ -12,9 +12,9 @@ Streaming parsing, plotting and owned-server cleanup are provided infrastructure
 The [50-slide core](https://levshaazz.github.io/llm-serving-mastery/Lectures/04-vllm-serving-core.html)
 is the main route; the 96-slide deck is optional reference. Read [Book 04](https://levshaazz.github.io/llm-serving-mastery/en/book/04/).
 
-The current v3 notebook code passed separate live-browser private instructor runs
-on Tesla T4 / standard 12.67 GB RAM on 11 October 2026, High RAM disabled, for
-prompt and format challengers. Each froze its calibration choice before held-out
+The isolated v3 notebook passed two full live-browser private instructor runs per
+challenger on 12 October 2026 (UTC), Tesla T4 / standard 12.67 GB RAM,
+High RAM disabled. Both prompt and format routes froze calibration choice before held-out
 and verified both owned-server teardowns. This is not independent student completion,
 a useful classifier-quality guarantee or latency A/B. Results and solutions stay private.
 GPU defaults false. The current sequential small-model student profile reserves
@@ -22,28 +22,32 @@ GPU defaults false. The current sequential small-model student profile reserves
 headroom during execution; the stricter 24 GiB instructor/judge envelope is separate.
 A paid-account standard-RAM run does not certify free GPU quota. Do not lower the
 measured preflight gates. The notebook contains no teacher solutions or outputs.
-This prose-only follow-up keeps every code cell, ID and metadata unchanged;
-the whole-file hash differs from the pristine rehearsed template.
+After these isolated-runtime rehearsals, delivery changes only readiness prose
+and two declared status fields, not scientific code or cell IDs/metadata. The
+whole-file hash distinguishes the rehearsed and delivered templates. This is a
+runtime migration, not the older 11 October prose-only update.
 
 ## Topic 03 — quantization investigation
 
 Topic 03 starts with your own grouped quantizer and real Qwen weights/activations,
 then a calibration-only choice, held-out check and a separate FP16/NF4 GPU A/B.
-Download the [complete lab ZIP](https://levshaazz.github.io/llm-serving-mastery/downloads/topic03-pilot.zip);
-in Colab upload `topic03_pilot.py` and `topic03-real-layer.npz` from it. Local copies
-also live in `teaching/` and `public/downloads/`. The older
+Download the [complete lab ZIP](https://levshaazz.github.io/llm-serving-mastery/downloads/topic03-pilot.zip)
+for local reading. The current Colab downloads and verifies the real-layer asset
+automatically; do not upload a helper manually. Readable copies also live in
+`teaching/` and `public/downloads/`. The older
 `03-quantization-tradeoffs.ipynb` remains historical, not the required current route.
-The current guided-investigation-v7 notebook passed a complete live-browser Colab
-T4 rehearsal on 11 October 2026 with standard 12.67 GB RAM and explicit private
-instructor solutions: all 49 student code cells, private bootstrap and export,
-no execution errors, both profiles complete. Results remain private. This
-prose-only follow-up preserves all code cells, identifiers and metadata exactly;
-the whole-file hash differs only because readiness explanations changed.
+The current isolated guided-investigation-v7 notebook passed two full live-browser
+T4 runs on 12 October 2026 (UTC), standard 12.67 GB RAM, with explicit private
+instructor solutions: 54 core code cells, both profiles complete. The delivered
+notebook has 98 cells. Results and answers remain private. After acceptance,
+only readiness explanations and two declared status fields changed; scientific
+code and cell IDs/metadata remain bound to the accepted references. The whole-file
+hash distinguishes the rehearsed and delivered templates.
 The [status summary](https://levshaazz.github.io/llm-serving-mastery/data/notebook-release.json)
 records pristine/delivered hashes, not solutions or experiment results.
 The immutable archived v6 template and its old measurements remain historical.
 Learner validation and free GPU quota are unverified, independently of execution.
-The historical notebook's default CPU route passed a browser run; its optional
+The historical notebook's default CPU route passed two full browser runs; its optional
 24 GiB GPU route was not tested in this migration.
 The lab now compares grouping, calibration-selected clipping and supplied NF4
 on the same weights/inputs before the separate whole-model GPU A/B.
@@ -54,12 +58,19 @@ Apache License 2.0; the exact [upstream license](public/downloads/QWEN-LICENSE.t
 Modification: export of layer-12 MLP down-projection rows 0–63 as FP16 arrays,
 plus recorded FP32 user-position activations. This is not a complete checkpoint.
 
-## Notebook readability and verification — 11 October 2026
+## Notebook readability and verification — 13 October 2026
 
-All six released notebooks use short one-action/one-result cells. Student functions
+All six released notebooks use isolated Python 3.11.17 and frozen dependencies,
+not inherited Colab scientific libraries. Scientific cells use `%%lsm` in a managed
+worker; ordinary Colab cells display results without repeating inference. Start
+with the supplied CPU route and explicitly opt in to GPU work when instructed.
+This isolates Python packages, not the provider's operating system or GPU driver.
+
+Notebooks use short one-action/one-result cells. Student functions
 and provided visible helpers carry type annotations and NumPy-style docstrings.
-The current Topics 00–04 GPU routes were checked by live Colab browser runs on
-T4 / standard RAM, including both Topic04 challengers; execution is distinct
+All seven mandatory routes passed two full live Colab browser runs on 12 October
+2026 (UTC): Topics 00–04 on T4 / standard RAM, both Topic04 challengers, and the
+historical Topic03 default CPU route. Technical execution is distinct
 from learner validation. Definition cells may be silent. Result viewers do not
 rerun model inference. Preserve all failed attempts and raw measurements in your
 own private submission; never turn a CPU fallback into claimed GPU evidence.

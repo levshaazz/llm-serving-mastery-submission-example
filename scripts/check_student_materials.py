@@ -2,19 +2,106 @@
 """Static, GPU-free gate for student-facing notebooks."""
 
 import ast
+import base64
+import hashlib
+import io
 import json
 import re
 import subprocess
 from pathlib import Path
+import zipfile
 
 
 ROOT = Path(__file__).resolve().parents[1]
 NOTEBOOKS = sorted((ROOT / "seminars").glob("[0-9][0-9]-*.ipynb"))
 
 
+def code_body(source: str) -> str:
+    """Remove only the declared literal-code transport, never skip its body.
+
+    Parameters
+    ----------
+    source : str
+        Exact code cell; a leading %%lsm newline is the only supported wrapper.
+
+    Returns
+    -------
+    str
+        Scientific code for static parsing, not execution.
+
+    Raises
+    ------
+    ValueError
+        Transport arguments, indentation or a duplicate transport are present.
+    """
+    if source.lstrip().startswith('%%lsm'):
+        if not source.startswith('%%lsm\n'):
+            raise ValueError('Malformed literal-code transport')
+        source = source[len('%%lsm\n'):]
+        if source.lstrip().startswith('%%lsm'):
+            raise ValueError('Duplicate literal-code transport')
+    return source
+
+
+def check_frozen_runtime(document: dict, label: str) -> None:
+    """Verify the exact portable frozen bundle without importing its modules.
+
+    Parameters
+    ----------
+    document : dict
+        Unexecuted student notebook containing provided runtime input cells.
+    label : str
+        Source name for a diagnostic; no private evidence is needed in a mirror.
+
+    Returns
+    -------
+    None
+        Source/hash checks only, not fresh browser or GPU acceptance.
+
+    Raises
+    ------
+    ValueError
+        Interpreter, bundle integrity, payload membership or isolation drifts.
+    """
+    metadata=document.get('metadata',{}).get('isolated_runtime',{})
+    if metadata.get('managed_python')!='3.11.17':
+        raise ValueError(label+': managed Python patch must be pinned')
+    by_id={cell['id']:cell for cell in document['cells']}
+    inputs=''.join(by_id['lsm-runtime-inputs']['source'])
+    tree=ast.parse(inputs)
+    payload_node=next(node for node in ast.walk(tree) if isinstance(node,ast.Call)
+        and isinstance(node.func,ast.Attribute) and node.func.attr=='b64decode')
+    payload=base64.b64decode(ast.literal_eval(payload_node.args[0]),validate=True)
+    if hashlib.sha256(payload).hexdigest()!=metadata.get('bundle_sha256'):
+        raise ValueError(label+': frozen runtime bundle digest')
+    with zipfile.ZipFile(io.BytesIO(payload)) as archive:
+        names={'runtime.py','bridge.py','worker.py','pyproject.toml','uv.lock','manifest.json'}
+        if set(archive.namelist())!=names:
+            raise ValueError(label+': unexpected frozen-runtime member')
+        manifest=json.loads(archive.read('manifest.json'))
+        if manifest.get('python')!='3.11.17' or manifest.get('dependency_isolation') is not True or manifest.get('os_sandbox') is not False:
+            raise ValueError(label+': interpreter/isolation manifest')
+        if set(manifest['files'])!=names-{'manifest.json'}:
+            raise ValueError(label+': incomplete frozen-runtime file inventory')
+        for name,digest in manifest['files'].items():
+            if hashlib.sha256(archive.read(name)).hexdigest()!=digest:
+                raise ValueError(label+': changed frozen-runtime source '+name)
+        installer=archive.read('runtime.py').decode()
+        if '08ad3f0a96b536082d6020a29830712c55346dca555f81a337c628f00369f57a' not in installer:
+            raise ValueError(label+': managed interpreter integrity absent')
+        if '--system-site-packages' in installer:
+            raise ValueError(label+': base package inheritance forbidden')
+    for identity in ('lsm-runtime-install','lsm-runtime-bridge','lsm-runtime-close'):
+        if identity not in by_id:
+            raise ValueError(label+': required isolated stage absent: '+identity)
+    install=''.join(by_id['lsm-runtime-install']['source'])
+    if not all(term in install for term in ("'runtime.py'", "'cpu'", 'RUNTIME_ROOT')):
+        raise ValueError(label+': CPU stage must use the supplied managed installer')
+
+
 def check_numpy_functions(source: str, label: str) -> int:
     """Reject undocumented/untyped function contracts in visible notebook code."""
-    tree = ast.parse(source, filename=label)
+    tree = ast.parse(code_body(source), filename=label)
     count = 0
     for node in ast.walk(tree):
         if not isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
@@ -89,7 +176,7 @@ def check_provided_visibility(source: str, metadata: dict, label: str) -> None:
     None
         Static guard only; the folded display still needs live browser review.
     """
-    if len(source) > 10000 and not (source.startswith('#@title ') and
+    if len(source) > 10000 and not (code_body(source).startswith('#@title ') and
             metadata.get('cellView') == 'form' and metadata.get('collapsed') is True and
             metadata.get('jupyter', {}).get('source_hidden') is True):
         raise ValueError(f'{label}: giant provided source must be a labelled folded form')
@@ -178,6 +265,8 @@ def main() -> None:
         if data.get("nbformat") != 4 or not data.get("cells"):
             raise ValueError(f"{path.name}: invalid or empty notebook")
         all_source = "".join("".join(cell.get("source", [])) for cell in data["cells"])
+        if 'isolated_runtime' in data['metadata']:
+            check_frozen_runtime(data,path.name)
         if path.name.startswith('01-'):
             check_literal_view(all_source)
         if path.name.startswith('02-'):
@@ -221,9 +310,10 @@ def main() -> None:
                 raise ValueError(f"{path.name}: persistent pinned local model cache contract missing")
             if "local_dir=MODEL_DIR" in all_source or not re.search(r"[0-9a-f]{40}", all_source):
                 raise ValueError(f"{path.name}: immutable model revision/cache integrity contract missing")
-            install_guard = "if not matches" if path.name.startswith(("03-", "04-")) else "if not installed"
-            if not all(term in all_source for term in ("PackageNotFoundError", "version(name)" if not path.name.startswith("04-") else "version('vllm')", install_guard)):
-                raise ValueError(f"{path.name}: pinned package installation must be conditional")
+            if 'isolated_runtime' not in data['metadata']:
+                install_guard = "if not matches" if path.name.startswith(("03-", "04-")) else "if not installed"
+                if not all(term in all_source for term in ("PackageNotFoundError", "version(name)" if not path.name.startswith("04-") else "version('vllm')", install_guard)):
+                    raise ValueError(f"{path.name}: pinned package installation must be conditional")
         if path.name.startswith("01-") and not all(
             term in all_source for term in ("worker.join(timeout=30)", "TextIteratorStreamer", "timeout=30")
         ):
@@ -265,10 +355,11 @@ def main() -> None:
             if cell.get("cell_type") != "code":
                 continue
             code_cells += 1
+            source = code_body(source)
             if source.lstrip().startswith(("%", "!")):
                 continue  # notebook runtime magic/shell cell
             ast.parse(source, filename=f"{path.name}:cell-{index}")
-            if path.name.startswith('04-'):
+            if path.name.startswith('04-') or 'isolated_runtime' in data['metadata']:
                 check_numpy_functions(source, f"{path.name}:cell-{index}")
         if not code_cells:
             raise ValueError(f"{path.name}: no executable code")

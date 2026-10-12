@@ -22,7 +22,7 @@ from pathlib import Path
 from typing import Any, Callable, Mapping, Sequence
 from types import FrameType
 
-PROTOCOL = 'topic03-engineering-pilot-v1'
+PROTOCOL = 'topic03-engineering-pilot-v2'
 MODEL_ID = 'Qwen/Qwen2.5-0.5B-Instruct'
 REVISION = '7ae557604adf67be50417f59c2c2f167def9a775'
 LABELS = ('billing', 'access', 'bug')
@@ -55,8 +55,7 @@ TRANSFER_CASES = [
     {'id': 't6', 'text': 'Login succeeds. Downloading a report produces an empty file instead of the report.', 'label': 'bug'},
 ]
 TIMING_PROMPT = 'Continue the sequence with comma-separated integers and no explanation: 2, 4, 6,'
-PINS = {'transformers': '4.51.3', 'accelerate': '1.6.0', 'bitsandbytes': '0.50.2',
-        'huggingface_hub': '0.30.2', 'safetensors': '0.5.3'}
+PINS = {'transformers': '5.17.0', 'accelerate': '1.15.0', 'bitsandbytes': '0.50.2', 'huggingface_hub': '1.33.0', 'safetensors': '0.8.0', 'torch': '2.13.0+cu129', 'numpy': '2.2.6'}
 
 
 def utc() -> str:

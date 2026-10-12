@@ -13,7 +13,7 @@ import socket
 import sys
 import unittest
 from unittest.mock import patch
-from notebook_static_fixtures import helper_module, recorded_literal
+from notebook_static_fixtures import code_cells, helper_module, python_body, recorded_literal
 
 ROOT = Path(__file__).resolve().parents[1]
 COURSE_ROOT = ROOT if (ROOT / "seminars").exists() else ROOT.parent
@@ -25,17 +25,19 @@ class Topic02RecapNotebookTests(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
         cls.notebook = json.loads(NOTEBOOK.read_text(encoding="utf-8"))
-        cls.code = ["".join(cell["source"]) for cell in cls.notebook["cells"]
-                    if cell["cell_type"] == "code"]
+        cls.code = code_cells(cls.notebook)
 
     def test_output_free_and_code_compiles(self):
-        self.assertEqual(len(self.notebook["cells"]), 57)
-        self.assertEqual(len(self.code), 28)
+        isolated = self.notebook['metadata'].get('isolated_runtime')
+        if isolated:
+            self.assertEqual(isolated['managed_python'], '3.11.17')
+        self.assertEqual(len(self.notebook["cells"]), 64 if isolated else 57)
+        self.assertEqual(len(self.code), 32 if isolated else 28)
         for cell in self.notebook["cells"]:
             if cell["cell_type"] == "code":
                 self.assertEqual(cell["outputs"], [])
                 self.assertIsNone(cell["execution_count"])
-                compile("".join(cell["source"]), cell["id"], "exec")
+                compile(python_body("".join(cell["source"])), cell["id"], "exec")
 
     def test_capture_raw_json_preserves_recorded_bytes(self):
         raw = recorded_literal(self.notebook, "RECORDED_BLOCK")
@@ -72,7 +74,10 @@ class Topic02RecapNotebookTests(unittest.TestCase):
         self.assertTrue(any('CPU FP32 reconstruction; not observed SDPA weights' in code for code in self.code))
         self.assertIn('illustrative', recap['__doc__'])
         self.assertIn('invented weights, not Qwen', recap['__doc__'])
-        self.assertTrue(any('pip' in code for code in self.code))
+        if self.notebook['metadata'].get('isolated_runtime'):
+            self.assertTrue(any("runtime.install_runtime(RUNTIME_ROOT, 'transformers')" in code for code in self.code))
+        else:
+            self.assertTrue(any('pip' in code for code in self.code))
         self.assertEqual(cache_ab["baseline"]["qkv_projection_row_calls"],1395)
         self.assertEqual(cache_ab["cached"]["qkv_projection_row_calls"],153)
         self.assertLess(cache_ab["max_abs_logit_difference"],1e-12)

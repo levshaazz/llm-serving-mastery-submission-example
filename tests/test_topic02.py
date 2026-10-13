@@ -3,6 +3,8 @@ import importlib.util
 from pathlib import Path
 import unittest
 
+ROOT = Path(__file__).resolve().parents[1]
+
 spec = importlib.util.spec_from_file_location("validate_topic02", Path(__file__).resolve().parents[1] / "scripts/validate_topic02.py")
 v = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(v)
@@ -11,7 +13,7 @@ spec.loader.exec_module(v)
 def fixture():
     data = {"protocol": "topic02-phase-v2", "status": "complete", "scope": "core", "trials": 5,
             "models": v.MODELS, "cases": list(map(list, v.CASES)),
-            "environment": {"dtype": "float16", "transformers": "4.51.3", "attention_requested": "sdpa",
+            "environment": {"dtype": "float16", "transformers": "5.17.0", "attention_requested": "sdpa",
                             "logits_to_keep": 1, "python": "fixture", "torch": "fixture", "cuda": "fixture", "gpu": "fixture"},
             "results": []}
     for model in v.MODELS:
@@ -52,6 +54,24 @@ class Topic02Contract(unittest.TestCase):
     def test_runtime_mismatch_rejected(self):
         data = fixture(); data["environment"]["logits_to_keep"] = 0
         with self.assertRaises(ValueError): v.validate(data)
+
+    def test_current_version_exact_and_historical_separate(self) -> None:
+        """Reject unknown versions; historical validation is an explicit route.
+
+        Returns
+        -------
+        None
+            Synthetic CPU records only, not GPU execution evidence.
+        """
+        for version in ('4.51.3','4.51.4','5.17','5.17.1','5.16.0','5.17.0+unknown',None,True):
+            data=fixture();data['environment']['transformers']=version
+            with self.assertRaises(ValueError):v.validate(data)
+        legacy_spec=importlib.util.spec_from_file_location('legacy_topic02',
+            ROOT/'scripts/validate_topic02_historical.py')
+        legacy=importlib.util.module_from_spec(legacy_spec);legacy_spec.loader.exec_module(legacy)
+        old=fixture();old['environment']['transformers']='4.51.3'
+        self.assertEqual(legacy.validate(old),50)
+        with self.assertRaises(ValueError):legacy.validate(fixture())
 
 
 if __name__ == "__main__": unittest.main()

@@ -1,5 +1,15 @@
 # LLM Serving Mastery — stable submission example
 
+## Material acceptance — 13 October 2026
+
+Topics01–04 have coordinated editorially accepted materials after independent
+agent review, not human expert review. Notebook rehearsal, learner validation
+and judge calibration are separate. The learner pilot and new host calibration
+remain pending; no grading policy changes. See the [material status summary](https://levshaazz.github.io/llm-serving-mastery/data/material-release.json).
+Topic02's optional historical live prompt is unavailable in the current worker;
+keep RUN_CONCRETE_PROMPT_LIVE=False. Only its warning prose changed; all32 code
+cells remain exact. The required50-trial matrix and two profiles are accepted.
+
 ## Topic 04 — current classifier investigation v3
 
 Open [the current notebook in Colab](https://colab.research.google.com/github/levshaazz/llm-serving-mastery-submission-example/blob/main/seminars/04-vllm-openai-serving.ipynb),
@@ -173,18 +183,28 @@ Topic 03 starts with grouped quantization and real layer error. Topic 04 starts 
 context admission, sampling, all-attempt task scores and real classifier errors; it
 then compares calibration policies and freezes the selection before held-out. Earlier
 standalone INT4/SSE demonstrations remain historical, not the current required route.
-Both investigations use incremental checkpoints and owned-worker teardown. The canonical helpers require
-Linux/WSL, an idle CUDA GPU and at least 24 GiB available host RAM. Do not lower resource gates to force
-a run. After your own successful run:
+Both investigations use incremental checkpoints and owned-worker teardown.
+Current Topic03/04 student startup checks require5GiB host/device headroom;
+running requires2GiB host plus1GiB device for03 or512MiB device for04. These
+measured small-model profiles are not the historical24GiB operator gate, judge
+requirements or free-quota guarantees. Do not lower gates. After your own run:
 
 ```bash
-python scripts/validate_topic03.py evidence/topic-03-comparison.json
+python scripts/validate_topic02.py path/to/topic02-benchmark.json
+python scripts/validate_topic03_pilot.py --validate path/to/topic03-pilot.json
 python scripts/validate_topic04.py evidence/topic-04-service.json
 ```
 
 Validators check identity, raw counts/clocks, completion and artifact consistency—not semantic quality,
 speed or a leaderboard score. Keep `topic-03-decision.md` and `topic-04-analysis.md` alongside the JSON
 in `evidence/`. Preserve failed attempts and never publish raw local server logs.
+
+Current02/04 validators are generated from the actual accepted notebook sources.
+The explicit `_historical.py` commands preserve old02/04 artifacts; old03 broad
+comparison uses `validate_topic03.py`. Do not use those for current work or
+install old packages. Current04 checks distribution0.30.0+cu129 and module0.30.0
+separately and uses the student resource profile. Results and teacher answers
+remain private. No scientific notebook code changed in this editorial release.
 
 The [course site](https://levshaazz.github.io/llm-serving-mastery/) has the syllabus, deadlines,
 published thresholds, slides, required artifacts and acceptance checklists. Keep generated evidence

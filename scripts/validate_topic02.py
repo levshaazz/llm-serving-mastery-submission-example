@@ -1,3 +1,4 @@
+#@title Provided raw artifact validator { display-mode: "form" }
 #!/usr/bin/env python3
 """CPU-only structure/arithmetic check, not a proof that a benchmark is genuine."""
 import argparse
@@ -32,7 +33,7 @@ def validate(data: dict) -> int:
     if data.get("models") != MODELS or sorted(data.get("cases", [])) != sorted(map(list, CASES)):
         raise ValueError("Pinned model revisions or required cases differ")
     env = data.get("environment", {})
-    if any(env.get(k) != v for k, v in {"dtype": "float16", "transformers": "4.51.3",
+    if any(env.get(k) != v for k, v in {"dtype": "float16", "transformers": "5.17.0",
                                         "attention_requested": "sdpa", "logits_to_keep": 1}.items()):
         raise ValueError("Protocol runtime settings differ")
     if not all(env.get(k) for k in ("python", "torch", "cuda", "gpu")):
@@ -64,10 +65,8 @@ def validate(data: dict) -> int:
         raise ValueError(f"Missing trials: found {len(seen)} of {len(expected)}")
     return len(seen)
 
-
-if __name__ == "__main__":
-    parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("artifact", type=Path)
+if __name__ == '__main__':
+    parser = argparse.ArgumentParser(description='Current Topic02 managed-runtime CPU contract check')
+    parser.add_argument('artifact',type=Path)
     args = parser.parse_args()
-    count = validate(json.loads(args.artifact.read_text(encoding="utf-8")))
-    print(f"Topic 02: {count} raw trials, pinned settings and arithmetic passed; authenticity needs review")
+    print('Topic02 raw trials checked:',validate(json.loads(args.artifact.read_text())))

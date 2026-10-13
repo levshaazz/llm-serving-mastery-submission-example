@@ -82,19 +82,27 @@ The trace names client, gateway, scheduler and worker boundaries. Mark events yo
 notebook without credentials or cached weights. Study Topic 02 and save its artifacts as listed on
 its topic page. Keep `JOURNAL.md` as the record of changes, measurements and failed hypotheses.
 
-Topics 03–04 begin with CPU-only worked examples and explicitly labeled recorded instructor
-replays. Those cells need no network, weights or GPU; they do not count as your own experiment.
-Their bounded CUDA routes require Linux/WSL, an idle GPU and at least 24 GiB available host RAM.
+Topics 03–04 begin with supplied frozen CPU setup, then small student-owned
+functions, numerical mechanisms and labelled recorded model data. Installation
+can need network access; CPU work does not count as your own GPU experiment.
+GPU work is opt-in after CPU completion. Current student startup checks require
+5 GiB host/device headroom; during work Topic03 requires 2 GiB host/1 GiB device,
+Topic04 2 GiB host/512 MiB device. These are workload-specific measured profiles,
+not the historical operator's 24 GiB gate or a guarantee of free Colab quota.
 Keep the paired natural-EOS/forced-length evidence separate in Topic 03, and complete/partial/failed
 streams separate in Topic 04. After your own successful run, validate the JSON before submission:
 
 ```bash
-python scripts/validate_topic03.py evidence/topic-03-comparison.json
+python scripts/validate_topic02.py path/to/topic02-benchmark.json
+python scripts/validate_topic03_pilot.py --validate path/to/topic03-pilot.json
 python scripts/validate_topic04.py evidence/topic-04-service.json
 ```
 
 Include `evidence/topic-03-decision.md` and `evidence/topic-04-analysis.md` as directed in the notebooks.
 Passing these CPU validators proves artifact consistency, not production quality, speed or a score.
+Historical02/04 artifacts use the explicitly named `_historical.py` scripts;
+historical03 uses `validate_topic03.py`. They do not accept current artifacts and
+are not instructions to install an old environment. Keep the judge separate.
 Preserve failed attempts locally, stop on resource pressure, and never delete model caches to retry.
 
 ## 5. Run the GPU streaming smoke

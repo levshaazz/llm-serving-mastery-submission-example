@@ -48,8 +48,9 @@ class Topic0304NotebookTests(unittest.TestCase):
                 compile(python_body(''.join(cell['source'])),cell['id'],'exec')
         return code_cells(data)
 
-    def validator(self,topic):
-        path=ROOT/'scripts'/f'validate_topic{topic}.py'
+    def validator(self,topic,*,historical=False):
+        suffix='_historical' if historical else ''
+        path=ROOT/'scripts'/f'validate_topic{topic}{suffix}.py'
         spec=importlib.util.spec_from_file_location('validator_'+topic,path)
         module=importlib.util.module_from_spec(spec); spec.loader.exec_module(module)
         return module.validate_artifact
@@ -107,7 +108,8 @@ class Topic0304NotebookTests(unittest.TestCase):
         ns=self.cpu_helper_fixtures('04')
         self.assertEqual(ns['FIXTURE']['complete']['content'],'Café ☕.')
         self.assertEqual(ns['REPLAY']['status'],'complete')
-        self.assertTrue(self.validator('04')(ns['RECORDED_SERVICE']))
+        self.assertTrue(self.validator('04',historical=True)(ns['RECORDED_SERVICE']))
+        with self.assertRaises(ValueError):self.validator('04')(ns['RECORDED_SERVICE'])
 
     def test_quantization_negative_artifacts(self):
         original=self.cpu_helper_fixtures('03')['RECORDED_QUANTIZATION']; validate=self.validator('03')
@@ -133,7 +135,7 @@ class Topic0304NotebookTests(unittest.TestCase):
             with self.assertRaises((ValueError,KeyError,TypeError)): validate(bad)
 
     def test_serving_negative_artifacts(self):
-        original=self.cpu_helper_fixtures('04')['RECORDED_SERVICE']; validate=self.validator('04')
+        original=self.cpu_helper_fixtures('04')['RECORDED_SERVICE']; validate=self.validator('04',historical=True)
         mutations=[lambda x:x.update(status='failed'),lambda x:x.update(vllm='unknown'),
             lambda x:x.update(served_name='wrong'),lambda x:x.update(advertised_models=[]),
             lambda x:x['raw_sse'].update(content='invented'),lambda x:x['raw_sse'].update(done=False),

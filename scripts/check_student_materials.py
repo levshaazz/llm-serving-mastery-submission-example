@@ -338,6 +338,27 @@ def main() -> None:
                          "raise NotImplementedError", "topic-04-client.json", "role_or_empty"):
                 if term not in all_source:
                     raise ValueError(f"{path.name}: student investigation missing {term}")
+        if path.name.startswith('05-'):
+            by_id={c['id']:c for c in data['cells']}
+            for identity in ('topic05-account-function','topic05-admission-function'):
+                if 'raise NotImplementedError' not in ''.join(by_id[identity]['source']):
+                    raise ValueError('Topic05 published student source contains a solved function')
+            parameters=''.join(by_id['topic05-gpu-parameters']['source'])
+            if 'RUN_GPU=False' not in parameters or 'COHORT_SIZES=[1]' not in parameters:
+                raise ValueError('Topic05 GPU opt-in/student intervention defaults drift')
+            for identity,variable,name in (
+                ('topic05-helper','HELPER_SOURCE','topic05_scheduling.py'),
+                ('topic05-gpu-helper','GPU_HELPER_SOURCE','topic05_gpu.py')):
+                tree=ast.parse(code_body(''.join(by_id[identity]['source'])))
+                assignment=next(n for n in ast.walk(tree) if isinstance(n,ast.Assign)
+                    and any(isinstance(t,ast.Name) and t.id==variable for t in n.targets))
+                embedded=ast.literal_eval(assignment.value).encode()
+                if embedded!=(ROOT/'teaching'/name).read_bytes():
+                    raise ValueError('Topic05 embedded/readable helper mismatch: '+name)
+            for term in ('LSM_PRIVATE_INSTRUCTOR_NOTES','private-topic05-close'):
+                if term in all_source:raise ValueError('Private Topic05 reference leaked')
+            if data['metadata']['lsm_topic05'].get('learnerValidation')!='pending':
+                raise ValueError('Technical rehearsal cannot certify learner completion')
         code_cells = 0
         cell_ids = set()
         for index, cell in enumerate(data["cells"], 1):

@@ -2,7 +2,7 @@
 
 ## Material acceptance — 13 October 2026
 
-Topics01–04 have coordinated editorially accepted materials after independent
+Topics 01–05 have coordinated editorially accepted materials after independent
 agent review, not human expert review. Notebook rehearsal, learner validation
 and judge calibration are separate. The learner pilot and new host calibration
 remain pending; no grading policy changes. See the [material status summary](https://levshaazz.github.io/llm-serving-mastery/data/material-release.json).
@@ -70,7 +70,7 @@ plus recorded FP32 user-position activations. This is not a complete checkpoint.
 
 ## Notebook readability and verification — 13 October 2026
 
-All six released notebooks use isolated Python 3.11.17 and frozen dependencies,
+All seven released notebooks use isolated Python 3.11.17 and frozen dependencies,
 not inherited Colab scientific libraries. Scientific cells use `%%lsm` in a managed
 worker; ordinary Colab cells display results without repeating inference. Start
 with the supplied CPU route and explicitly opt in to GPU work when instructed.
@@ -78,12 +78,34 @@ This isolates Python packages, not the provider's operating system or GPU driver
 
 Notebooks use short one-action/one-result cells. Student functions
 and provided visible helpers carry type annotations and NumPy-style docstrings.
-All seven mandatory routes passed two full live Colab browser runs on 12 October
+The seven existing routes passed two full live Colab browser runs on 12 October
 2026 (UTC): Topics 00–04 on T4 / standard RAM, both Topic04 challengers, and the
 historical Topic03 default CPU route. Technical execution is distinct
 from learner validation. Definition cells may be silent. Result viewers do not
 rerun model inference. Preserve all failed attempts and raw measurements in your
 own private submission; never turn a CPU fallback into claimed GPU evidence.
+
+Topic 05 has its own two exact full instructor browser runs on 13 October 2026
+(UTC), T4 / standard RAM, and 24 corrected negative/repeated checks. This does not
+inherit Topic 00–04 results or certify learner completion, free quota, production
+quality or judge calibration. Teacher answers and all actual run results stay private.
+
+## Topic 05 — place KV, admit work, test a comparison
+
+Open the [unsolved notebook in Colab](https://colab.research.google.com/github/levshaazz/llm-serving-mastery-submission-example/blob/main/seminars/05-paged-attention-and-batching.ipynb),
+[Book 05](https://levshaazz.github.io/llm-serving-mastery/en/book/05/),
+[37-slide investigation](https://levshaazz.github.io/llm-serving-mastery/Lectures/05-paged-attention-and-batching.html),
+or the [matching notebook/helper/runtime ZIP](public/downloads/topic05-investigation.zip).
+Implement independent block accounting and arrival-aware FIFO selection. Explain
+one global attention normalization, then write your prediction before inference.
+Compare matched offline bursts of 1 and 4 on the same 12 tickets, keep every repeat
+and actual answer, and write a four-field engineering decision. This experiment
+does not measure admission of a fifth waiting request, HTTP client latency, TTFT,
+p95 or the isolated causal contribution of PagedAttention. GPU defaults false.
+Startup checks reserve 6 GiB free host/device memory; running checks reserve 2 GiB
+host / 512 MiB device. These are observed workload bounds, not the judge envelope
+or a guarantee that free Colab will allocate a GPU. No teacher solutions or executed
+outputs are included. See the [Topic 05 hub](https://levshaazz.github.io/llm-serving-mastery/en/topics/05/).
 
 Use this public repository as the starting point for your own leaderboard submission and for the
 course notebooks. Create a repository from it, replace the author and experiment notes, and keep
@@ -165,6 +187,7 @@ private repository's Issue with **@levshaazz**. Never put raw logs or credential
 | 02 · GPU bottlenecks | [profiler lab](seminars/02-gpu-profiling-and-bottlenecks.ipynb) | [Open](https://colab.research.google.com/github/levshaazz/llm-serving-mastery-submission-example/blob/main/seminars/02-gpu-profiling-and-bottlenecks.ipynb) |
 | 03 · quantization | [One matrix, four bits: required investigation](seminars/03-quantization-pilot.ipynb) | [Open](https://colab.research.google.com/github/levshaazz/llm-serving-mastery-submission-example/blob/main/seminars/03-quantization-pilot.ipynb) |
 | 04 · ML service | [Serve a classifier: required v3 investigation](seminars/04-vllm-openai-serving.ipynb) | [Open](https://colab.research.google.com/github/levshaazz/llm-serving-mastery-submission-example/blob/main/seminars/04-vllm-openai-serving.ipynb) |
+| 05 · KV and scheduling | [Place state and admit work](seminars/05-paged-attention-and-batching.ipynb) | [Open](https://colab.research.google.com/github/levshaazz/llm-serving-mastery-submission-example/blob/main/seminars/05-paged-attention-and-batching.ipynb) |
 
 Topics 03–04 deliberately use bounded experiments. The older Topics 01–04 implementations
 passed sequential offline instructor GPU rehearsals on an RTX 5070 Ti; those runs do not certify

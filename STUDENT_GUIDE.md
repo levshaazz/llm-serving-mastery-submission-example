@@ -107,6 +107,18 @@ Preserve failed attempts locally, stop on resource pressure, and never delete mo
 
 ## 5. Run the GPU streaming smoke
 
+Topic 05 is a separate bounded notebook investigation, not this server smoke.
+Start from the [Topic 05 hub](https://levshaazz.github.io/llm-serving-mastery/en/topics/05/):
+implement independent block accounting and arrival-aware FIFO, explain the attention
+denominator, save your prediction before GPU inference, then compare offline bursts
+of 1 and 4. Keep all actual answers, clocks, both engine logs, `index.json`, your
+four-field `worksheet.json`, and the modified notebook in your private repository.
+The notebook's own ZIP preserves those six measured files with an integrity inventory.
+Do not upload weights or credentials. Free GPU allocation is not guaranteed; a CPU
+completion is not a GPU result. The real burst comparison does not measure HTTP
+latency, TTFT, p95 or admission of a fifth waiting request. Do not alter the judge's
+resource gates or treat this learning evidence as an automatically awarded score.
+
 On Linux or a suitable Colab environment, run `bash serve.sh` from your submission checkout.
 The first launch may download the pinned model and dependencies; keep their caches for later runs.
 In a second terminal, once `/v1/models` is ready, run:

@@ -1,5 +1,16 @@
 # LLM Serving Mastery — stable submission example
 
+## Grading update — 1 November 2026
+
+Current Round 01–04 submissions in registered repositories are accepted without a
+late penalty. Each round retains its original thresholds and seed; previously
+awarded grades never decrease. Successful unchanged results are retained; new
+submissions, previous failures and appeals require actual checks. Round 01 retains
+full participation credit for an actual solution even without a tag or with failed
+checks, with no Overdrive. Pending access or measurement remains ungraded. Future
+deadlines are unchanged. Follow the [submission guide](STUDENT_GUIDE.md) and
+[official leaderboard](https://levshaazz.github.io/llm-serving-mastery/en/leaderboard/).
+
 ## Material acceptance — 13 October 2026
 
 Topics 01–05 have coordinated editorially accepted materials after independent

@@ -148,6 +148,18 @@ stay private; the instructor does not post them to the public portal.
 
 ## 7. Freeze and submit
 
+**Update, 1 November 2026 — late Round 01–04 submissions:** current tags in registered
+repositories are accepted without a late penalty. Each round keeps its original
+thresholds and seed; an already awarded grade cannot decrease. The judge records
+the actual new capture date and preserves older snapshots and results. Successful
+unchanged commits retain their reviewed results; new work, prior failures and
+appeals are checked. For a correction after the current capture, commit your fix,
+push the intended round tag and send its full SHA in your private Issue so the
+instructor can acknowledge a separate capture. Do not assume a moved tag was
+automatically picked up. Round 01 retains full credit for an actual solution even
+without a tag or with failed checks, and no Overdrive. Pending access or judge
+measurement is ungraded. This exception does not extend future rounds.
+
 Check the [canonical deadlines](https://levshaazz.github.io/llm-serving-mastery/en/schedule/).
 Commit all source, lockfile, journal and required evidence. Confirm `git status` is clean, the intended
 commit passed your checks, the judge has access, and your private remote is correct. Then:

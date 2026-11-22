@@ -246,3 +246,15 @@ in your own repository; never commit access tokens, model caches or weights.
 
 This template is the **reference implementation**. The [Round 01 leaderboard page](https://levshaazz.github.io/llm-serving-mastery/en/leaderboard/)
 publishes the verified config-v5 RTX 5070 Ti bars.
+
+## Labs companion runtime (Colab) — 22 November 2026
+
+The interactive labs on the course site run their simulators in the browser; the layer-2
+measurements (a real engine, the burst drill, the journal) need a runtime. The optional
+companion notebook [classroom/lsm-colab-companion.ipynb](classroom/lsm-colab-companion.ipynb)
+turns a free [Colab](https://colab.research.google.com/github/levshaazz/llm-serving-mastery-submission-example/blob/main/classroom/lsm-colab-companion.ipynb)
+session into that runtime: its single setup cell starts the serving bridge, raises a
+temporary tunnel and prints the URL and token to paste into the lab page's runtime panel.
+The token lives only in your Colab session; the quick-tunnel address changes on every start.
+Colab is optional — any machine with Docker runs the same layer-2 profile. The classroom copy
+matches the site's Downloads copy byte-for-byte.

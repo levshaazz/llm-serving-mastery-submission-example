@@ -303,8 +303,11 @@ def headroom(startup: bool = False) -> Headroom:
     """
     fields={line.split(':')[0]:int(line.split()[1])*1024
             for line in Path('/proc/meminfo').read_text().splitlines() if line.startswith('MemAvailable:')}
-    raw=subprocess.check_output(['nvidia-smi','--id=0','--query-gpu=memory.free,memory.used',
-        '--format=csv,noheader,nounits'],text=True).strip()
+    try:
+        raw=subprocess.check_output(['nvidia-smi','--id=0','--query-gpu=memory.free,memory.used',
+            '--format=csv,noheader,nounits'],text=True).strip()
+    except FileNotFoundError as e:
+        raise RuntimeError('Stop: no CUDA diagnostics on this runtime (nvidia-smi not found) - attach a GPU runtime such as T4 before the GPU stages') from e
     free,used=map(int,raw.split(','))
     record=Headroom(host_available_bytes=fields['MemAvailable'],gpu_free_mib=free,gpu_used_mib=used)
     if record['host_available_bytes']<(6 if startup else 2)*2**30 or free<(6144 if startup else 512):
